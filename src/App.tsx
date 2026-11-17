@@ -370,9 +370,6 @@ function App() {
     setEditorOpen(true)
     locateNonce.current += 1
     setLocateRequest({ line, nonce: locateNonce.current })
-    if (window.innerWidth < 1024) {
-      document.getElementById('source-workbench')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
   }, [])
 
   const handleRelay = async (id: PlatformId) => {

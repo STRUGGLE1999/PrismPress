@@ -34,6 +34,7 @@ export function LeftWorkbench({ markdown, stats, sanitize, imageReport, samples,
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const lastLocateNonce = useRef(0)
   const [dragging, setDragging] = useState(false)
+  const [locatedLine, setLocatedLine] = useState<number | null>(null)
   const totalFixes = sanitize.fixes.length
 
   useEffect(() => {
@@ -43,9 +44,30 @@ export function LeftWorkbench({ markdown, stats, sanitize, imageReport, samples,
     const lines = markdown.split('\n')
     const index = Math.min(Math.max(locateRequest.line - 1, 0), lines.length - 1)
     const start = lines.slice(0, index).reduce((sum, line) => sum + line.length + 1, 0)
-    textarea.focus()
+    // Measure visual lines with the same width and typography as the textarea.
+    // Markdown line numbers alone do not account for wrapped paragraphs or URLs.
+    const mirror = document.createElement('div')
+    const style = window.getComputedStyle(textarea)
+    for (const property of ['font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing', 'padding', 'tab-size', 'word-break', 'text-indent']) {
+      mirror.style.setProperty(property, style.getPropertyValue(property))
+    }
+    Object.assign(mirror.style, {
+      position: 'fixed', left: '-100000px', top: '0', visibility: 'hidden',
+      width: `${textarea.clientWidth}px`, boxSizing: 'border-box',
+      whiteSpace: 'pre-wrap', overflowWrap: 'break-word',
+    })
+    mirror.textContent = markdown.slice(0, start)
+    const marker = document.createElement('span')
+    marker.textContent = lines[index] || '\u200b'
+    mirror.appendChild(marker)
+    document.body.appendChild(mirror)
+    const top = marker.getBoundingClientRect().top - mirror.getBoundingClientRect().top
+    mirror.remove()
+    textarea.focus({ preventScroll: true })
     textarea.setSelectionRange(start, start + lines[index].length)
-    textarea.scrollTop = Math.max(0, index * 24 - textarea.clientHeight / 3)
+    textarea.scrollTop = Math.max(0, top - textarea.clientHeight / 3)
+    setLocatedLine(index + 1)
+    if (window.innerWidth <= 900) textarea.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, [locateRequest, markdown])
 
   const dropFiles = (event: DragEvent<HTMLElement>) => {
@@ -87,7 +109,7 @@ export function LeftWorkbench({ markdown, stats, sanitize, imageReport, samples,
         spellCheck={false} className="source-textarea" placeholder="# 输入文章标题\n\n在这里粘贴 Markdown 正文，也可以拖入 .md 文件和配图。" />
       <div className="editor-footnote">
         <span>{stats.characters.toLocaleString('zh-CN')} 字 · {imageReport.total} 张图片 · 约 {stats.readingMinutes} 分钟阅读</span>
-        <span>{saveState === 'saved' ? '已保存在当前浏览器' : '保存失败，请下载备份'}</span>
+        <span role="status">{locatedLine !== null ? `已定位原稿第 ${locatedLine} 行 · ` : ''}{saveState === 'saved' ? '已保存在当前浏览器' : '保存失败，请下载备份'}</span>
       </div>
       <details className="advanced-tools">
         <summary>格式检查与图片工具 <span>{totalFixes ? `${totalFixes} 处格式已整理` : '格式检查已完成'}{imageReport.red + imageReport.yellow > 0 ? ` · ${imageReport.red + imageReport.yellow} 张图片需关注` : ''}</span></summary>
