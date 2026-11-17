@@ -168,3 +168,15 @@ export function scanImages(images: RawImage[], markdown = ''): ImageReport {
     healthy: counts.yellow === 0 && counts.red === 0,
   }
 }
+
+/** Mark already loaded pictures without parsing their encoded bytes as Markdown. */
+export function resolveImageReport(report: ImageReport, sources: Record<string, string>): ImageReport {
+  const findings = report.findings.map((item) => {
+    const source = sources[item.url]
+    if (!source) return item
+    const status = classifyImage(source)
+    return { ...item, ...status, reason: source.startsWith('data:image/') ? '本地图片已读取；复制后请确认目标平台转存结果' : status.reason }
+  })
+  return { ...report, findings, green: findings.filter((item) => item.health === 'green').length,
+    yellow: findings.filter((item) => item.health === 'yellow').length, red: findings.filter((item) => item.health === 'red').length }
+}

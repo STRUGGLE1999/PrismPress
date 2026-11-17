@@ -1,17 +1,41 @@
 import { visit } from 'unist-util-visit'
-import { parseMarkdown, replaceImageReference } from '@/core'
+import { analyzeMarkdown, scanImages, parseMarkdown } from '@/core'
 import type { LocalImageAsset } from './localImage'
 
-export function materializeImages(markdown: string, assets: Record<string, LocalImageAsset>): string {
-  const names = Object.keys(assets)
-  return Object.values(assets).reduce((text, asset) => replaceImageReference(text, asset.name,
-    asset.mode === 'remote' && asset.remoteUrl ? asset.remoteUrl : asset.dataUrl,
-    names.filter((name) => name.split('/').pop() === asset.name.split('/').pop()).length === 1), markdown)
+/** Match filenames before reading or decoding any picture bytes. Ambiguities stay unresolved. */
+export function imageSourceNames(markdown: string, names: string[]): Record<string, string> {
+  const normalize = (path: string) => {
+    try { path = decodeURIComponent(path) } catch { /* Preserve invalid escapes. */ }
+    return path.replace(/\\/g, '/').replace(/^file:\/\//i, '').replace(/^(?:\.\/)+/, '')
+  }
+  const paths = names.map((name) => ({ name, path: normalize(name) }))
+  const selected: Record<string, string> = {}
+  const references = scanImages(analyzeMarkdown(markdown).images, markdown).findings
+  for (const reference of references) {
+    if (/^(?:https?:|data:|blob:|\/\/)/i.test(reference.url)) continue
+    const path = normalize(reference.url)
+    const exact = paths.filter((item) => item.path === path || (path.includes('/') && (item.path.endsWith(`/${path}`) || path.endsWith(`/${item.path}`))))
+    const matches = exact.length ? exact : paths.filter((item) => item.path.split('/').pop() === path.split('/').pop())
+    if (matches.length === 1) selected[reference.url] = matches[0].name
+  }
+  return selected
+}
+
+export function referencedImageNames(markdown: string, names: string[]): Set<string> {
+  return new Set(Object.values(imageSourceNames(markdown, names)))
+}
+
+export function imageSources(markdown: string, assets: Record<string, LocalImageAsset>): Record<string, string> {
+  return Object.fromEntries(Object.entries(imageSourceNames(markdown, Object.keys(assets))).map(([source, name]) => {
+    const asset = assets[name]
+    return [source, asset.mode === 'remote' && asset.remoteUrl ? asset.remoteUrl : asset.dataUrl]
+  }))
 }
 
 /** Recover older drafts that stored picture bytes directly in the source. */
 export function detachInlineImages(markdown: string) {
   const assets: Record<string, LocalImageAsset> = {}
+  if (!markdown.includes('data:image/')) return { markdown, assets }
   const edits: { start: number; end: number; text: string }[] = []
   let number = 0
   visit(parseMarkdown(markdown), 'image', (node) => {

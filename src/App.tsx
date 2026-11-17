@@ -24,7 +24,8 @@ import { RightPassport } from '@/components/RightPassport'
 
 type PublishTab = 'passport' | 'covers' | 'relay'
 import { PicListGuideModal } from '@/components/PicListGuideModal'
-import { detachInlineImages, materializeImages, imageChangeKey } from '@/components/imageWorkspace'
+import { detachInlineImages, imageSources, imageChangeKey, referencedImageNames } from '@/components/imageWorkspace'
+import { resolveImageReport } from '@/core/images/radar'
 import { loadImageAssets, saveImageAssets } from '@/components/imageStorage'
 import type { LocalImageAsset } from '@/components/localImage'
 import prismBrandImage from '../assets/brand/prismpress-brand-transparent.png'
@@ -97,10 +98,14 @@ function App() {
   const [workflowStep, setWorkflowStep] = useState<2 | 3>(2)
   const [editorOpen, setEditorOpen] = useState(false)
   const importInput = useRef<HTMLInputElement>(null)
+  const assetSave = useRef<Promise<void>>(Promise.resolve())
+  const importToken = useRef(0)
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number; skipped: number } | null>(null)
   const folderInput = useRef<HTMLInputElement>(null)
   const [stageTab, setStageTab] = useState<PublishTab>('passport')
   const [saveState, setSaveState] = useState<'saving' | 'saved' | 'error'>('saving')
   const [result, setResult] = useState<CompileResult | null>(null)
+  const [compiledContentKey, setCompiledContentKey] = useState('')
   const [compiledTheme, setCompiledTheme] = useState<ThemePreset>(initial?.themeId ?? DEFAULT_SAMPLE.themeId)
   const [compiling, setCompiling] = useState(true)
   const [compileError, setCompileError] = useState<string | null>(null)
@@ -121,13 +126,13 @@ function App() {
   const effectiveThemeId = platformId === 'wechat' ? themeId : DEFAULT_RICH_THEME_ID
   const theme = getRichTheme(effectiveThemeId)
 
-  const resolvedMarkdown = useMemo(() => materializeImages(markdown, localImages), [markdown, localImages])
-  const contentKey = useMemo(() => imageChangeKey(resolvedMarkdown), [resolvedMarkdown])
+  const sources = useMemo(() => imageSources(markdown, localImages), [markdown, localImages])
+  const contentKey = useMemo(() => imageChangeKey(markdown + Object.values(sources).map(imageChangeKey).join('|')), [markdown, sources])
   const sanitize = useMemo(() => sanitizeMarkdown(markdown), [markdown])
   const analysis = useMemo(() => analyzeMarkdown(sanitize.output), [sanitize.output])
   const imageReport = useMemo(
-    () => scanImages(analyzeMarkdown(resolvedMarkdown).images, resolvedMarkdown),
-    [resolvedMarkdown],
+    () => resolveImageReport(scanImages(analysis.images, sanitize.output), sources),
+    [analysis.images, sanitize.output, sources],
   )
   const passport = useMemo(() => generatePassport(markdown), [markdown])
   const localImageList = useMemo(() => Object.values(localImages), [localImages])
@@ -149,12 +154,16 @@ function App() {
   }, [])
 
   useEffect(() => {
+    if (assetsReady) assetSave.current = saveImageAssets(localImages)
+  }, [assetsReady, localImages])
+
+  useEffect(() => {
     if (!assetsReady) return
     let active = true
     setSaveState('saving')
     const payload: PersistedWorkspace = { typographyVersion: 1, markdown, activeSampleId, platformId, themeId, synced }
     // Save pictures before replacing an older draft containing embedded data.
-    void saveImageAssets(localImages).then(() => {
+    void assetSave.current.then(() => {
       if (!active) return
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
       setSaveState('saved')
@@ -175,11 +184,12 @@ function App() {
     setCompileError(null)
 
     const timer = window.setTimeout(() => {
-      compileArticle(resolvedMarkdown, platformId, { themeId: effectiveThemeId })
+      compileArticle(markdown, platformId, { themeId: effectiveThemeId, imageSources: sources })
         .then((compiled) => {
           if (!alive) return
           setResult(compiled)
           setCompiledTheme(effectiveThemeId)
+          setCompiledContentKey(contentKey)
           setCompiling(false)
         })
         .catch((error: unknown) => {
@@ -193,13 +203,13 @@ function App() {
       alive = false
       window.clearTimeout(timer)
     }
-  }, [resolvedMarkdown, platformId, effectiveThemeId])
+  }, [markdown, sources, platformId, effectiveThemeId])
 
   const displayResult =
     result &&
     result.platform.id === platformId &&
-    result.sanitize.input === resolvedMarkdown &&
-    compiledTheme === effectiveThemeId
+    result.sanitize.input === markdown &&
+    compiledTheme === effectiveThemeId && compiledContentKey === contentKey
       ? result
       : null
 
@@ -217,11 +227,12 @@ function App() {
     showToast(`已载入「${sample.name}」范文`, 'info')
   }
 
-  const handleImportFiles = async (files: FileList | File[]) => {
+  const handleImportFiles = async (files: FileList | File[], imagesOnly = false) => {
     const list = Array.from(files)
     if (list.length === 0) return
 
-    const markdownFiles = list.filter(
+    const token = ++importToken.current
+    const markdownFiles = imagesOnly ? [] : list.filter(
       (file) => /\.(md|markdown|txt)$/i.test(file.name) || file.type === 'text/markdown',
     )
     const imageFiles = list.filter((file) => file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(file.name))
@@ -239,10 +250,18 @@ function App() {
     }
 
     const imagePath = (file: File) => file.webkitRelativePath || file.name
+    if (token !== importToken.current) return
+    const referenced = referencedImageNames(next, imageFiles.map(imagePath))
+    const neededImages = imageFiles.filter((file) => referenced.has(imagePath(file)))
+    const skipped = imageFiles.length - neededImages.length
+    setImportProgress({ done: 0, total: neededImages.length, skipped })
     const additions: Record<string, LocalImageAsset> = {}
-    for (const file of imageFiles) {
+    for (const [index, file] of neededImages.entries()) {
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+      if (token !== importToken.current) return
       try {
         const compressed = await compressImageToDataUrl(file)
+        if (token !== importToken.current) return
         const path = imagePath(file)
         additions[path] = {
           name: path,
@@ -255,8 +274,11 @@ function App() {
       } catch {
         showToast(`图片「${file.name}」处理失败`, 'error')
       }
+      if (token !== importToken.current) return
+      setImportProgress({ done: index + 1, total: neededImages.length, skipped })
     }
-
+    if (token !== importToken.current) return
+    setImportProgress(null)
     if (Object.keys(additions).length > 0) {
       setLocalImages((previous) => ({ ...previous, ...additions }))
     }
@@ -270,19 +292,19 @@ function App() {
       setEditorOpen(false)
     }
 
-    const readySource = materializeImages(next, { ...localImages, ...additions })
-    const missing = scanImages(analyzeMarkdown(readySource).images, readySource).findings.filter((item) => item.health === 'red')
+    const readyImages = imageSources(next, { ...localImages, ...additions })
+    const missing = resolveImageReport(scanImages(analyzeMarkdown(next).images, next), readyImages).findings.filter((item) => item.health === 'red')
     const processed = Object.keys(additions).length
     if (missing.length > 0) {
       showToast(`文章已导入，仍有 ${missing.length} 张图片未读入。请选择包含配图的文件夹。`, 'info')
-    } else if (imageFiles.length > processed) {
-      showToast(`已处理 ${processed} 张图片，${imageFiles.length - processed} 张处理失败，请检查文件。`, 'error')
+    } else if (neededImages.length > processed) {
+      showToast(`已处理 ${processed} 张图片，${neededImages.length - processed} 张处理失败，请检查文件。`, 'error')
     } else if (loadedMarkdown && imageFiles.length > 0) {
-      showToast(`已导入 Markdown，并关联 ${imageFiles.length} 张图片`, 'success')
+      showToast(`已导入 Markdown，并关联 ${processed} 张图片，跳过 ${skipped} 张无关图片`, 'success')
     } else if (loadedMarkdown) {
       showToast(`已导入「${markdownFiles[0]?.name ?? 'Markdown'}」`, 'success')
     } else if (imageFiles.length > 0) {
-      showToast(`已关联 ${imageFiles.length} 张图片，复制时会自动携带图片数据`, 'success')
+      showToast(`已关联 ${processed} 张图片，跳过 ${skipped} 张无关图片`, 'success')
     } else {
       showToast('未识别到可导入文件，请拖入 .md 或图片', 'error')
     }
@@ -394,11 +416,11 @@ function App() {
       const reusable =
         result &&
         result.platform.id === id &&
-        result.sanitize.input === resolvedMarkdown &&
-        compiledTheme === targetThemeId
+        result.sanitize.input === markdown &&
+        compiledTheme === targetThemeId && compiledContentKey === contentKey
           ? result
           : null
-      const compiled = reusable ?? (await compileArticle(resolvedMarkdown, id, { themeId: targetThemeId }))
+      const compiled = reusable ?? (await compileArticle(markdown, id, { themeId: targetThemeId, imageSources: sources }))
       await copyCompiledArticle(compiled)
 
       if (popup && !popup.closed) {
@@ -444,12 +466,13 @@ function App() {
             <button type="button" aria-current={workflowStep === 3 ? 'page' : undefined} disabled={!markdown.trim()} onClick={() => { setStageTab('passport'); setWorkflowStep(3) }}>准备发布 →</button>
           </nav>
           <input ref={importInput} type="file" multiple accept=".md,.markdown,.txt,image/*" className="hidden" onChange={(event) => { if (event.target.files) void handleImportFiles(event.target.files); event.target.value = '' }} />
-          <input ref={folderInput} type="file" multiple {...{ webkitdirectory: '', directory: '' }} className="hidden" onChange={(event) => { if (event.target.files) void handleImportFiles(event.target.files); event.target.value = '' }} />
+          <input ref={folderInput} type="file" multiple {...{ webkitdirectory: '', directory: '' }} className="hidden" onChange={(event) => { if (event.target.files) void handleImportFiles(event.target.files, true); event.target.value = '' }} />
           <div className="flex flex-wrap gap-2">
             <button type="button" className="secondary-action" onClick={() => importInput.current?.click()}><PrismIcon name="upload" />导入文章</button>
             <button type="button" className="secondary-action" onClick={() => folderInput.current?.click()}>导入配图文件夹</button>
           </div>
         </div>
+        {importProgress && <div className="missing-images" role="status"><span>正在处理文章配图 {importProgress.done} / {importProgress.total}，已跳过 {importProgress.skipped} 张无关图片。</span><button type="button" className="text-action" onClick={() => { importToken.current += 1; setImportProgress(null); showToast('已取消导入，原稿和已保存配图未修改', 'info') }}>取消导入</button></div>}
         {saveState === 'error' && <div className="save-warning" role="alert">当前浏览器未能保存草稿。请先<button type="button" onClick={downloadSource}>下载原稿备份</button>并保留原始配图文件夹，避免刷新后丢失修改。</div>}
         {workflowStep !== 3 && <>
           <section className="platform-selection">

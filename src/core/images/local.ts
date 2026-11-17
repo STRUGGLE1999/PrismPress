@@ -84,18 +84,25 @@ export function replaceImageReference(markdown: string, fileName: string, nextUr
     if (path === target || (path.includes('/') && (path.endsWith(`/${target}`) || target.endsWith(`/${path}`)))) return true
     return allowBaseName && path.split('/').pop() === target.split('/').pop()
   }
+  return rewriteImageUrls(markdown, (source) => matches(source) ? nextUrl : undefined)
+}
+
+/** Parse short source once; never feed newly embedded image bytes back to the parser. */
+export function rewriteImageUrls(markdown: string, resolve: (source: string) => string | undefined): string {
   const edits: { start: number; end: number; text: string }[] = []
   visit(parseMarkdown(markdown), (node) => {
     const start = node.position?.start.offset
     const end = node.position?.end.offset
     if (start === undefined || end === undefined) return
-    if (node.type === 'image' && matches(node.url)) {
+    if (node.type === 'image') {
+      const nextUrl = resolve(node.url)
+      if (!nextUrl) return
       const alt = (node.alt ?? '').replace(/[\\[\]]/g, '\\$&')
       const title = node.title ? ` "${node.title.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : ''
       edits.push({ start, end, text: `![${alt}](${nextUrl}${title})` })
     } else if (node.type === 'html') {
       const text = node.value.replace(/(<img\b[^>]*\bsrc\s*=\s*["'])([^"']+)(["'])/gi,
-        (whole, prefix: string, src: string, suffix: string) => matches(src) ? `${prefix}${nextUrl}${suffix}` : whole)
+        (whole, prefix: string, src: string, suffix: string) => { const nextUrl = resolve(src); return nextUrl ? `${prefix}${nextUrl}${suffix}` : whole })
       if (text !== node.value) edits.push({ start, end, text })
     }
   })

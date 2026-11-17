@@ -1,5 +1,5 @@
 import { PrismIcon } from '@/components/PrismIcon'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { MouseEvent } from 'react'
 import type {
   ClipboardMime,
@@ -10,7 +10,7 @@ import type {
   RichTheme,
   ThemePreset,
 } from '@/core'
-import { RICH_THEMES, analyzeMarkdown, renderRichDocument, getRichTheme } from '@/core'
+import { RICH_THEMES } from '@/core'
 import { SocialDeckSimulator } from './SocialDeckSimulator'
 
 interface CenterPreviewProps {
@@ -49,17 +49,6 @@ export function CenterPreview({
 }: CenterPreviewProps) {
   const [viewport, setViewport] = useState<'desktop' | 'mobile'>('desktop')
   const [markdownTab, setMarkdownTab] = useState<'rendered' | 'raw'>('rendered')
-
-  const [markdownPreview, setMarkdownPreview] = useState<{ key: string; html: string } | null>(null)
-  useEffect(() => {
-    if (!result || result.format !== 'markdown') return
-    let active = true
-    const document = analyzeMarkdown(result.sanitize.output)
-    void renderRichDocument(document.root, { platform, theme: getRichTheme('native'), lineMap: result.sanitize.lineMap, stripTopH1: true })
-      .then(({ html }) => { if (active) setMarkdownPreview({ key: result.sanitize.input, html }) })
-      .catch(() => { if (active) setMarkdownPreview(null) })
-    return () => { active = false }
-  }, [result, platform])
 
   const previewHtml =
     result?.format === 'html'
@@ -493,7 +482,7 @@ export function CenterPreview({
                   )}
 
                   <div className="rich-preview platform-article px-6 py-5" onClick={handlePreviewClick}
-                    dangerouslySetInnerHTML={{ __html: markdownPreview?.key === result.sanitize.input ? markdownPreview.html : '<p>正在生成文章预览…</p>' }} />
+                    dangerouslySetInnerHTML={{ __html: result.previewHtml ?? '<p>文章预览暂不可用</p>' }} />
                 </div>
               </div>
             )}

@@ -1,3 +1,6 @@
+import { rewriteImageUrls } from '../images/local'
+import { visit } from 'unist-util-visit'
+import { resolveImageReport } from '../images/radar'
 import type {
   CompileOptions,
   CompileResult,
@@ -40,7 +43,16 @@ export async function compileArticle(
   const platform = getPlatform(platformId)
   const sanitize = sanitizeMarkdown(source)
   const document = analyzeMarkdown(sanitize.output)
-  const images = scanImages(document.images, sanitize.output)
+  const images = resolveImageReport(scanImages(document.images, sanitize.output), options.imageSources ?? {})
+  // Parse only the short source. Attach picture bytes to parsed nodes afterwards.
+  visit(document.root, (node) => {
+    if (node.type === 'image') node.url = options.imageSources?.[node.url] ?? node.url
+    if (node.type === 'html') node.value = node.value.replace(/(<img\b[^>]*\bsrc\s*=\s*["'])([^"']+)(["'])/gi,
+      (whole, prefix: string, source: string, suffix: string) => {
+        const value = options.imageSources?.[source]
+        return value ? `${prefix}${value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}${suffix}` : whole
+      })
+  })
   const diagnostics: Diagnostic[] = []
 
   const fixCount = sanitize.counts.reduce((total, item) => total + item.count, 0)
@@ -67,6 +79,7 @@ export async function compileArticle(
     })
   }
 
+  let previewHtml: string | undefined
   let body = ''
   let externalLinks: ExternalLink[] = []
   let slides = undefined
@@ -133,7 +146,8 @@ export async function compileArticle(
     const transformed = transformMarkdown(sanitize.output, platform, {
       injectToc: options.injectToc,
     })
-    body = transformed.markdown
+    body = options.imageSources ? rewriteImageUrls(transformed.markdown, (source) => options.imageSources?.[source]) : transformed.markdown
+    previewHtml = (await renderRichDocument(document.root, { platform, theme: getRichTheme('native'), lineMap: sanitize.lineMap, stripTopH1: true })).html
     externalLinks = collectExternalLinks(document.links)
     diagnostics.push(...transformed.diagnostics)
   }
@@ -141,6 +155,7 @@ export async function compileArticle(
   return {
     platform,
     format: platform.format,
+    previewHtml,
     body,
     plainText: platform.format === 'deck' ? body : document.plainText,
     slides,

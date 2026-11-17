@@ -194,6 +194,7 @@ export interface CompileResult {
   plainText: string
   /** 小红书 / 抖音 3:4 视觉知识图集切片 */
   slides?: SlideCard[]
+  previewHtml?: string
   stats: DocStats
   diagnostics: Diagnostic[]
   externalLinks: ExternalLink[]
@@ -202,6 +203,7 @@ export interface CompileResult {
 }
 
 export interface CompileOptions {
+  imageSources?: Record<string, string>
   /** 注入 TOC（仅 CSDN 默认开启，可覆盖） */
   injectToc?: boolean
   /** 微信参考资料卡片标题 */
