@@ -37,10 +37,10 @@ export interface RichTheme {
 }
 
 const SERIF_FONT =
-  '"Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", "SimSun", Georgia, serif'
+  `'Songti SC', 'STSong', 'Noto Serif SC', 'Source Han Serif SC', 'SimSun', Georgia, serif`
 const SANS_FONT =
-  '-apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif'
-const MONO_FONT = '"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace'
+  `'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif`
+const MONO_FONT = `'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace`
 
 export const PARCHMENT: RichTheme = {
   id: 'parchment',
@@ -63,7 +63,7 @@ export const PARCHMENT: RichTheme = {
   link: '#8C3A1B',
   tableHeader: '#F1E5D3',
   highlight: '#E8C98A',
-  fontFamily: SERIF_FONT,
+  fontFamily: SANS_FONT,
   headingFontFamily: SERIF_FONT,
   monoFont: MONO_FONT,
   h2Style: 'parchment',

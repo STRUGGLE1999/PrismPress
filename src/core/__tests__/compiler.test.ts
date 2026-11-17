@@ -249,3 +249,14 @@ describe('章节摘要图集的内容边界', () => {
     expect(section.formulaSvg).toContain('<svg')
   })
 })
+
+describe('公众号正文排版', () => {
+  it.each(RICH_THEMES.map((theme) => theme.id))('%s 的字体列表不会截断 HTML 样式属性', async (themeId) => {
+    const result = await compileArticle('# 标题\n\n中文与 English 混排正文。\n\n```js\nconst count = 1\n```', 'wechat', { themeId })
+    const containerStyle = result.body.match(/^<section style="([^"]*)"/)?.[1]
+    expect(containerStyle).toContain('Microsoft YaHei')
+    expect(containerStyle).toContain('font-size:16px;line-height:1.75;')
+    expect(result.body).toContain('letter-spacing:normal;')
+    expect(result.body).not.toMatch(/font-family:"/)
+  })
+})

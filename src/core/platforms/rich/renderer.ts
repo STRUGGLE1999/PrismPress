@@ -404,9 +404,11 @@ function renderNode(node: RootContent, ctx: RenderContext): string {
   switch (node.type) {
     case 'paragraph': {
       const paragraph = node as Paragraph
-      const spacing = theme.preset === 'parchment' ? '0.04em' : '0.01em'
+      const wechat = ctx.platform.id === 'wechat'
+      const spacing = wechat ? 'normal' : theme.preset === 'parchment' ? '0.04em' : '0.01em'
+      const lineHeight = wechat ? '1.75' : '1.88'
       return withSourceLine(
-        `<p style="margin:0 0 16px;font-size:16px;line-height:1.88;color:${theme.text};letter-spacing:${spacing};">${inlineChildren(paragraph.children, ctx)}</p>`,
+        `<p style="margin:0 0 16px;font-size:16px;line-height:${lineHeight};color:${theme.text};letter-spacing:${spacing};">${inlineChildren(paragraph.children, ctx)}</p>`,
         node,
         ctx,
       )
@@ -541,7 +543,7 @@ export async function renderRichDocument(
   const references = renderReferences(ctx, options.referenceTitle ?? '参考资料')
   const html =
     options.platform.id === 'wechat'
-      ? `<section style="font-family:${options.theme.fontFamily};font-size:16px;line-height:1.88;color:${options.theme.text};background:${options.theme.paper};padding:2px;word-break:break-word;-webkit-text-size-adjust:100%;">${body}${references}</section>`
+      ? `<section style="font-family:${options.theme.fontFamily};font-size:16px;line-height:1.75;color:${options.theme.text};background:${options.theme.paper};padding:2px;word-break:break-word;-webkit-text-size-adjust:100%;">${body}${references}</section>`
       : `${body}${references}`
 
   return {

@@ -321,7 +321,7 @@ export function CenterPreview({
               key={`${platformId}-${themeId}-${viewport}`}
               className={`prism-rise mx-auto min-h-full overflow-hidden shadow-[0_20px_60px_rgba(39,39,42,0.12)] transition-all duration-300 ${
                 viewport === 'mobile'
-                  ? 'max-w-[385px] rounded-[36px] border-[7px] border-[#27272A]'
+                  ? 'max-w-[389px] rounded-[36px] border-[7px] border-[#27272A]'
                   : 'max-w-[690px] rounded-2xl'
               }`}
               style={{
@@ -330,7 +330,7 @@ export function CenterPreview({
               }}
             >
               <div
-                className="border-b px-5 pb-4 pt-6 sm:px-8"
+                className={`border-b pb-4 pt-6 ${viewport === 'mobile' ? 'px-4' : 'px-5 sm:px-8'}`}
                 style={{ borderColor: `${theme.border}88` }}
               >
                 <h1
@@ -355,7 +355,7 @@ export function CenterPreview({
               </div>
 
               <div
-                className="rich-preview px-5 py-6 sm:px-8"
+                className={`rich-preview py-6 ${viewport === 'mobile' ? 'px-4' : 'px-5 sm:px-8'}`}
                 onClick={handlePreviewClick}
                 dangerouslySetInnerHTML={{ __html: previewHtml || result.body }}
               />
