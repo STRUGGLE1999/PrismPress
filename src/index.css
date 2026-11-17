@@ -256,3 +256,23 @@ button:focus-visible, select:focus-visible, textarea:focus-visible, summary:focu
   .step-actions { align-items: flex-start; flex-direction: column; }.step-actions > .primary-action { width: 100%; }
   .platform-options button { padding: 9px 11px; }.publication-header, .publication-panel { padding: 20px 16px; }.publication-tabs { gap: 18px; padding-inline: 16px; }.publication-tabs button { font-size: 12px; }.step-actions.inside { padding-inline: 16px; }
 }
+
+/* Keep the result visible while the source is edited. */
+.workspace-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 24px; }
+.workspace-views { display: flex; flex-wrap: wrap; gap: 6px; }
+.workspace-views button { padding: 10px 14px; border-radius: 12px; font-size: 13px; color: #71717a; }
+.workspace-views button[aria-current] { background: #ede9fe; color: #6d28d9; font-weight: 700; }
+.live-workspace, .live-preview { min-width: 0; }
+.live-workspace.is-editing { display: grid; grid-template-columns: minmax(300px, .8fr) minmax(0, 1.2fr); gap: 22px; align-items: start; }
+.live-workspace.is-editing .editor-toolbar { flex-wrap: wrap; }
+.live-workspace.is-editing .sample-picker { flex-wrap: wrap; }
+.live-workspace.is-editing .sample-picker select { min-width: 0; max-width: 100%; }
+.live-workspace.is-editing .source-textarea { min-height: 540px; }
+@media (max-width: 900px) {
+  .live-workspace.is-editing { grid-template-columns: minmax(0, 1fr); }
+  .live-workspace.is-editing .source-textarea { min-height: 240px; height: 300px; }
+}
+@media (max-width: 640px) {
+  .workspace-toolbar { align-items: stretch; flex-direction: column; }
+  .workspace-toolbar > .secondary-action { align-self: flex-start; }
+}

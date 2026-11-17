@@ -91,7 +91,9 @@ function App() {
   )
   const [platformId, setPlatformId] = useState<PlatformId>(initial?.platformId ?? 'wechat')
   const [themeId, setThemeId] = useState<ThemePreset>(initial?.themeId ?? DEFAULT_SAMPLE.themeId)
-  const [workflowStep, setWorkflowStep] = useState<1 | 2 | 3>(1)
+  const [workflowStep, setWorkflowStep] = useState<2 | 3>(2)
+  const [editorOpen, setEditorOpen] = useState(false)
+  const importInput = useRef<HTMLInputElement>(null)
   const [stageTab, setStageTab] = useState<PublishTab>('passport')
   const [saveState, setSaveState] = useState<'saved' | 'error'>('saved')
   const [result, setResult] = useState<CompileResult | null>(null)
@@ -248,6 +250,11 @@ function App() {
       setCopyState('idle')
     }
 
+    if (loadedMarkdown) {
+      setWorkflowStep(2)
+      setEditorOpen(false)
+    }
+
     if (loadedMarkdown && imageFiles.length > 0) {
       showToast(`已导入 Markdown，并内联 ${imageFiles.length} 张图片`, 'success')
     } else if (loadedMarkdown) {
@@ -359,7 +366,8 @@ function App() {
   }
 
   const handleLocate = useCallback((line: number) => {
-    setWorkflowStep(1)
+    setWorkflowStep(2)
+    setEditorOpen(true)
     locateNonce.current += 1
     setLocateRequest({ line, nonce: locateNonce.current })
     if (window.innerWidth < 1024) {
@@ -410,12 +418,6 @@ function App() {
     URL.revokeObjectURL(url)
   }
 
-  const steps = [
-    { number: 1, title: '准备文章', hint: '导入或体验真实示例' },
-    { number: 2, title: '选择平台', hint: '检查适配后的排版' },
-    { number: 3, title: '准备发布', hint: '复制内容与发布资料' },
-  ] as const
-
   return (
     <div className="app-shell">
       <header className="product-header">
@@ -428,30 +430,32 @@ function App() {
           <h1>写好一篇，适配不同平台。</h1>
           <p>导入 Markdown，预览平台排版，再带着正文、摘要与封面去发布。</p>
         </div>
-        <nav className="workflow-steps" aria-label="发布流程">
-          {steps.map((step) => <button type="button" key={step.number} aria-current={workflowStep === step.number ? 'step' : undefined}
-            disabled={step.number > 1 && !markdown.trim()} onClick={() => setWorkflowStep(step.number)}>
-            <span className="step-number">{step.number}</span><span><strong>{step.title}</strong><small>{step.hint}</small></span>
-          </button>)}
-        </nav>
+        <div className="workspace-toolbar">
+          <nav className="workspace-views" aria-label="工作区">
+            <button type="button" aria-current={workflowStep !== 3 ? 'page' : undefined} onClick={() => setWorkflowStep(2)}>文章与平台预览</button>
+            <button type="button" aria-current={workflowStep === 3 ? 'page' : undefined} disabled={!markdown.trim()} onClick={() => { setStageTab('passport'); setWorkflowStep(3) }}>准备发布 →</button>
+          </nav>
+          <input ref={importInput} type="file" multiple accept=".md,.markdown,.txt,image/*" className="hidden" onChange={(event) => { if (event.target.files) void handleImportFiles(event.target.files); event.target.value = '' }} />
+          <button type="button" className="secondary-action" onClick={() => importInput.current?.click()}><PrismIcon name="upload" />导入文章</button>
+        </div>
         {saveState === 'error' && <div className="save-warning" role="alert">当前浏览器未能保存草稿。请先<button type="button" onClick={downloadSource}>下载原稿备份</button>，避免刷新后丢失修改。</div>}
-        {workflowStep === 1 && <>
-          <LeftWorkbench markdown={markdown} stats={analysis.stats} sanitize={sanitize} imageReport={imageReport}
+        {workflowStep !== 3 && <>
+          <div className={`live-workspace ${editorOpen ? 'is-editing' : ''}`}>
+          {editorOpen && <LeftWorkbench markdown={markdown} stats={analysis.stats} sanitize={sanitize} imageReport={imageReport}
             samples={SAMPLE_ARTICLES} activeSampleId={activeSampleId} localImages={localImageList} imageBusy={imageBusy} saveState={saveState}
             locateRequest={locateRequest} onMarkdownChange={handleMarkdownChange} onSelectSample={handleSelectSample}
             onImportFiles={handleImportFiles} onPicListUpload={handlePicListUpload} onInlineConvert={handleInlineConvert}
-            onOpenGuide={() => setGuideOpen(true)} onRemoveImage={handleRemoveImage} />
-          <div className="step-actions"><p>内容留在当前浏览器。下一步选择要发布的平台。</p><button type="button" className="primary-action" disabled={!markdown.trim()} onClick={() => setWorkflowStep(2)}>下一步：选择平台 <span aria-hidden="true">→</span></button></div>
-        </>}
-        {workflowStep === 2 && <>
+            onOpenGuide={() => setGuideOpen(true)} onRemoveImage={handleRemoveImage} />}
+          <div className="live-preview">
           <section className="platform-selection">
-            <div><h2>这次准备发到哪里？</h2><p>切换平台即可预览；同一份原稿可以重复使用。</p></div>
+            <div><h2>切换平台，查看成品</h2><p>原稿修改后自动更新预览，发布前请在官方编辑器确认效果。</p></div>
             <nav className="platform-options" aria-label="选择发布平台">{PLATFORMS.map((item) => <button type="button" key={item.id} aria-pressed={item.id === platformId} onClick={() => { setPlatformId(item.id); setCopyState('idle') }}><PlatformIcon id={item.id} />{item.shortName}</button>)}</nav>
           </section>
-          <div className="preview-caption"><span>{analysis.title || '未命名文章'} · {imageReport.total} 张原稿图片</span><button type="button" className="text-action" onClick={() => setWorkflowStep(1)}>修改原稿</button></div>
+          <div className="preview-caption"><span>{analysis.title || '未命名文章'} · {imageReport.total} 张原稿图片</span><button type="button" className="text-action" aria-expanded={editorOpen} onClick={() => setEditorOpen((open) => !open)}>{editorOpen ? '收起原稿' : '修改原稿 / 选择示例'}</button></div>
           <CenterPreview platformId={platformId} platform={platform} themeId={themeId} theme={theme} result={displayResult} passport={passport}
             compiling={compiling} compileError={compileError} onThemeChange={(id) => { setThemeId(id); setCopyState('idle') }} onCopyText={handleCopyText} onLocate={handleLocate} onToast={showToast} />
-          <div className="step-actions"><button type="button" className="text-action" onClick={() => setWorkflowStep(1)}>← 返回文章</button><button type="button" className="primary-action" disabled={!displayResult || compiling} onClick={() => { setStageTab('passport'); setWorkflowStep(3) }}>下一步：准备发布 <span aria-hidden="true">→</span></button></div>
+          <div className="step-actions"><p>{saveState === 'saved' ? '已保存在当前浏览器' : '保存失败，请下载原稿备份'} · 可随时切换平台</p><button type="button" className="primary-action" disabled={!displayResult || compiling} onClick={() => { setStageTab('passport'); setWorkflowStep(3) }}>准备发布 <span aria-hidden="true">→</span></button></div>
+          </div></div>
         </>}
         {workflowStep === 3 && <section className="publication-workspace">
           <div className="publication-header"><div className="flex items-center gap-3"><PlatformIcon id={platformId} /><div><h2>把文章交给{platform.shortName}</h2><p>{platform.format === 'deck' ? '图集请在预览页下载，这里准备配套文案和素材。' : '先复制适配后的正文，再按需要补齐发布资料。'}</p></div></div><button type="button" className="primary-action" disabled={!displayResult || compiling} onClick={handleCopy}><PrismIcon name="copy" />{copyState === 'copied' && synced[platformId] === copyKeys[platformId] ? '已复制当前内容' : platform.format === 'deck' ? '复制配套文案' : '复制正文'}</button></div>
