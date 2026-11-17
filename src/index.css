@@ -298,3 +298,9 @@ button:focus-visible, select:focus-visible, textarea:focus-visible, summary:focu
 [data-preview-platform="zhihu"] .rich-preview p { font-size: 16px; line-height: 1.8; }
 [data-preview-platform="bilibili"] .rich-preview p { font-size: 16px; line-height: 1.8; }
 [data-preview-platform="xiaohongshu"], [data-preview-platform="douyin"] { font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif; }
+
+.missing-images { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; padding: 16px; border: 1px solid #f0d6b6; border-radius: 12px; background: #fff9ef; color: #805323; font-size: 12px; line-height: 1.8; }
+.missing-images > div { min-width: 0; }
+.missing-images ul { margin-top: 8px; max-height: 100px; overflow-y: auto; overflow-wrap: anywhere; }
+.missing-images button { flex-shrink: 0; }
+@media (max-width: 640px) { .missing-images { flex-direction: column; } }

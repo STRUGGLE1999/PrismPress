@@ -1,3 +1,6 @@
+import { visit } from 'unist-util-visit'
+import { parseMarkdown } from '../markdown/document'
+
 export interface CompressedImage {
   dataUrl: string
   width: number
@@ -67,42 +70,34 @@ export async function compressImageToDataUrl(
   }
 }
 
-function baseName(path: string): string {
-  const parts = path.split(/[\\/]/)
-  return parts[parts.length - 1] ?? path
+function normalizedPath(path: string): string {
+  try { path = decodeURIComponent(path) } catch { /* Keep malformed escapes unchanged. */ }
+  return path.replace(/\\/g, '/').replace(/^file:\/\//i, '').replace(/^(?:\.\/)+/, '')
 }
 
-/**
- * 将 Markdown / 内嵌 HTML 中引用该文件名的图片地址替换为新的 URL 或 data URI。
- */
-export function replaceImageReference(markdown: string, fileName: string, nextUrl: string): string {
-  const target = baseName(fileName)
-
-  const nextMarkdown = markdown.replace(
-    /(!\[[^\]]*\]\()(\S+?)(\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?(\))/g,
-    (whole, prefix: string, src: string, title: string | undefined, suffix: string) => {
-      let decoded = src
-      try {
-        decoded = decodeURI(src)
-      } catch {
-        decoded = src
-      }
-      if (baseName(decoded) !== target) return whole
-      return `${prefix}${nextUrl}${title ?? ''}${suffix}`
-    },
-  )
-
-  return nextMarkdown.replace(
-    /(<img\b[^>]*\bsrc\s*=\s*["'])([^"']+)(["'])/gi,
-    (whole, prefix: string, src: string, suffix: string) => {
-      let decoded = src
-      try {
-        decoded = decodeURI(src)
-      } catch {
-        decoded = src
-      }
-      if (baseName(decoded) !== target) return whole
-      return `${prefix}${nextUrl}${suffix}`
-    },
-  )
+/** Replace actual image nodes, preserving code examples and unrelated remote URLs. */
+export function replaceImageReference(markdown: string, fileName: string, nextUrl: string, allowBaseName = true): string {
+  const target = normalizedPath(fileName)
+  const matches = (source: string) => {
+    if (/^(?:https?:|data:|blob:|\/\/)/i.test(source)) return false
+    const path = normalizedPath(source)
+    if (path === target || (path.includes('/') && (path.endsWith(`/${target}`) || target.endsWith(`/${path}`)))) return true
+    return allowBaseName && path.split('/').pop() === target.split('/').pop()
+  }
+  const edits: { start: number; end: number; text: string }[] = []
+  visit(parseMarkdown(markdown), (node) => {
+    const start = node.position?.start.offset
+    const end = node.position?.end.offset
+    if (start === undefined || end === undefined) return
+    if (node.type === 'image' && matches(node.url)) {
+      const alt = (node.alt ?? '').replace(/[\\[\]]/g, '\\$&')
+      const title = node.title ? ` "${node.title.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : ''
+      edits.push({ start, end, text: `![${alt}](${nextUrl}${title})` })
+    } else if (node.type === 'html') {
+      const text = node.value.replace(/(<img\b[^>]*\bsrc\s*=\s*["'])([^"']+)(["'])/gi,
+        (whole, prefix: string, src: string, suffix: string) => matches(src) ? `${prefix}${nextUrl}${suffix}` : whole)
+      if (text !== node.value) edits.push({ start, end, text })
+    }
+  })
+  return edits.sort((a, b) => b.start - a.start).reduce((text, edit) => text.slice(0, edit.start) + edit.text + text.slice(edit.end), markdown)
 }

@@ -263,3 +263,26 @@ describe('公众号正文排版', () => {
     expect(result.body).not.toMatch(/font-family:"/)
   })
 })
+
+describe('本地配图匹配', () => {
+  it('支持中文、空格、括号和编码路径，保留标题', () => {
+    const markdown = '![图](<images/截图 (1).png> "配图标题")\n![图二](images/截图%20%281%29.png)'
+    const result = replaceImageReference(markdown, '文章/images/截图 (1).png', 'data:image/png;base64,AAAA')
+    expect(result.match(/data:image\/png;base64,AAAA/g)).toHaveLength(2)
+    expect(result).toContain('"配图标题"')
+  })
+  it('不会改写代码示例或同名远程图片', () => {
+    const markdown = '```md\n![示例](images/a.png)\n```\n\n![远程](https://example.com/a.png)\n\n![本地](images/a.png)'
+    const result = replaceImageReference(markdown, 'a.png', 'data:image/png;base64,AAAA')
+    expect(result).toContain('![示例](images/a.png)')
+    expect(result).toContain('https://example.com/a.png')
+    expect(result.match(/data:image\/png;base64,AAAA/g)).toHaveLength(1)
+  })
+  it('同名文件有歧义时按目录匹配，不猜测裸文件名', () => {
+    const markdown = '![A](a/图.png)\n![B](b/图.png)\n![未知](图.png)'
+    const result = replaceImageReference(markdown, '文章/a/图.png', 'data:image/png;base64,AAAA', false)
+    expect(result).toContain('![A](data:image/png;base64,AAAA)')
+    expect(result).toContain('![B](b/图.png)')
+    expect(result).toContain('![未知](图.png)')
+  })
+})

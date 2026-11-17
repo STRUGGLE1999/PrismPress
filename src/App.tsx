@@ -95,6 +95,7 @@ function App() {
   const [workflowStep, setWorkflowStep] = useState<2 | 3>(2)
   const [editorOpen, setEditorOpen] = useState(false)
   const importInput = useRef<HTMLInputElement>(null)
+  const folderInput = useRef<HTMLInputElement>(null)
   const [stageTab, setStageTab] = useState<PublishTab>('passport')
   const [saveState, setSaveState] = useState<'saved' | 'error'>('saved')
   const [result, setResult] = useState<CompileResult | null>(null)
@@ -212,7 +213,7 @@ function App() {
     const markdownFiles = list.filter(
       (file) => /\.(md|markdown|txt)$/i.test(file.name) || file.type === 'text/markdown',
     )
-    const imageFiles = list.filter((file) => file.type.startsWith('image/'))
+    const imageFiles = list.filter((file) => file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(file.name))
 
     let next = markdown
     let loadedMarkdown = false
@@ -226,19 +227,29 @@ function App() {
       }
     }
 
+    const imagePath = (file: File) => file.webkitRelativePath || file.name
+    const paths = [...new Set([...Object.keys(localImages), ...imageFiles.map(imagePath)])]
+    const uniqueBaseName = (path: string) => paths.filter((candidate) => candidate.split('/').pop() === path.split('/').pop()).length === 1
+    // Reuse already imported pictures when the article is selected afterwards.
+    if (loadedMarkdown) {
+      for (const asset of Object.values(localImages)) {
+        next = replaceImageReference(next, asset.name, asset.remoteUrl ?? asset.dataUrl, uniqueBaseName(asset.name))
+      }
+    }
     const additions: Record<string, LocalImageAsset> = {}
     for (const file of imageFiles) {
       try {
         const compressed = await compressImageToDataUrl(file)
-        additions[file.name] = {
-          name: file.name,
+        const path = imagePath(file)
+        additions[path] = {
+          name: path,
           file,
           dataUrl: compressed.dataUrl,
           mime: compressed.mime,
           bytes: compressed.bytes,
           mode: 'inline',
         }
-        next = replaceImageReference(next, file.name, compressed.dataUrl)
+        next = replaceImageReference(next, path, compressed.dataUrl, uniqueBaseName(path))
       } catch {
         showToast(`图片「${file.name}」处理失败`, 'error')
       }
@@ -257,7 +268,13 @@ function App() {
       setEditorOpen(false)
     }
 
-    if (loadedMarkdown && imageFiles.length > 0) {
+    const missing = scanImages(analyzeMarkdown(next).images, next).findings.filter((item) => item.health === 'red')
+    const processed = Object.keys(additions).length
+    if (missing.length > 0) {
+      showToast(`文章已导入，仍有 ${missing.length} 张图片未读入。请选择包含配图的文件夹。`, 'info')
+    } else if (imageFiles.length > processed) {
+      showToast(`已处理 ${processed} 张图片，${imageFiles.length - processed} 张处理失败，请检查文件。`, 'error')
+    } else if (loadedMarkdown && imageFiles.length > 0) {
       showToast(`已导入 Markdown，并内联 ${imageFiles.length} 张图片`, 'success')
     } else if (loadedMarkdown) {
       showToast(`已导入「${markdownFiles[0]?.name ?? 'Markdown'}」`, 'success')
@@ -435,7 +452,11 @@ function App() {
             <button type="button" aria-current={workflowStep === 3 ? 'page' : undefined} disabled={!markdown.trim()} onClick={() => { setStageTab('passport'); setWorkflowStep(3) }}>准备发布 →</button>
           </nav>
           <input ref={importInput} type="file" multiple accept=".md,.markdown,.txt,image/*" className="hidden" onChange={(event) => { if (event.target.files) void handleImportFiles(event.target.files); event.target.value = '' }} />
-          <button type="button" className="secondary-action" onClick={() => importInput.current?.click()}><PrismIcon name="upload" />导入文章</button>
+          <input ref={folderInput} type="file" multiple {...{ webkitdirectory: '', directory: '' }} className="hidden" onChange={(event) => { if (event.target.files) void handleImportFiles(event.target.files); event.target.value = '' }} />
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="secondary-action" onClick={() => importInput.current?.click()}><PrismIcon name="upload" />导入文章</button>
+            <button type="button" className="secondary-action" onClick={() => folderInput.current?.click()}>导入配图文件夹</button>
+          </div>
         </div>
         {saveState === 'error' && <div className="save-warning" role="alert">当前浏览器未能保存草稿。请先<button type="button" onClick={downloadSource}>下载原稿备份</button>，避免刷新后丢失修改。</div>}
         {workflowStep !== 3 && <>
@@ -444,6 +465,12 @@ function App() {
             <nav className="platform-options" aria-label="选择发布平台">{PLATFORMS.map((item) => <button type="button" key={item.id} aria-pressed={item.id === platformId} onClick={() => { setPlatformId(item.id); setCopyState('idle') }}><PlatformIcon id={item.id} />{item.shortName}</button>)}</nav>
           </section>
           <div className="preview-caption"><span>{analysis.title || '未命名文章'} · {imageReport.total} 张原稿图片</span><button type="button" className="text-action" aria-expanded={editorOpen} onClick={() => setEditorOpen((open) => !open)}>{editorOpen ? '收起原稿' : '修改原稿 / 选择示例'}</button></div>
+          {imageReport.red > 0 && <div className="missing-images" role="status">
+            <div><strong>{imageReport.red} 张图片尚未就绪</strong><p>Markdown 只保存图片路径。选择文章的配图文件夹后，平台会自动匹配，不需要逐张替换。</p>
+              <ul>{imageReport.findings.filter((item) => item.health === 'red').map((item, index) => <li key={`${item.url}-${index}`}>{item.url} — {item.reason}</li>)}</ul>
+            </div>
+            <button type="button" className="secondary-action" onClick={() => folderInput.current?.click()}>读取配图文件夹</button>
+          </div>}
           <div className={`live-workspace ${editorOpen ? 'is-editing' : ''}`}>
           {editorOpen && <LeftWorkbench markdown={markdown} stats={analysis.stats} sanitize={sanitize} imageReport={imageReport}
             samples={SAMPLE_ARTICLES} activeSampleId={activeSampleId} localImages={localImageList} imageBusy={imageBusy} saveState={saveState}
