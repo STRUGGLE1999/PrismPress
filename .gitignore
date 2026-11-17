@@ -11,3 +11,7 @@ dist-ssr
 .trae-html-share-packages/
 .playwright-cli/
 output/
+
+# Private, continuously maintained development records
+/docs/开发日志.md
+/docs/项目交接.md

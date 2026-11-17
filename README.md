@@ -2,6 +2,8 @@
 
 把一篇 Markdown 整理成适合不同平台的内容，减少重复排版和发布表单整理。
 
+线上体验：[PrismPress](https://prismpress-sigma.vercel.app/)。当前首版不包含运行时 AI 生图。
+
 ## 使用流程
 
 1. 导入 `.md` 文件后，可选择包含配图的文件夹。只读取当前文章引用的图片，忽略无关图片及其他文档；显示处理进度并可取消。也可展开原稿选择两篇真实示例。
@@ -17,7 +19,7 @@ npm install
 npm run dev
 ```
 
-使用终端显示的本地地址。`npm test` 运行回归测试，`npm run build` 生成静态站点到 `dist/`。当前仓库内未记录公开部署地址。
+使用终端显示的本地地址。`npm test` 运行回归测试，`npm run build` 生成静态站点到 `dist/`。首版已部署至 Vercel。
 
 ## 数据与依赖
 
