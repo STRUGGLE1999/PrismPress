@@ -440,6 +440,11 @@ function App() {
         </div>
         {saveState === 'error' && <div className="save-warning" role="alert">当前浏览器未能保存草稿。请先<button type="button" onClick={downloadSource}>下载原稿备份</button>，避免刷新后丢失修改。</div>}
         {workflowStep !== 3 && <>
+          <section className="platform-selection">
+            <div><h2>切换平台，查看成品</h2><p>原稿修改后自动更新预览，发布前请在官方编辑器确认效果。</p></div>
+            <nav className="platform-options" aria-label="选择发布平台">{PLATFORMS.map((item) => <button type="button" key={item.id} aria-pressed={item.id === platformId} onClick={() => { setPlatformId(item.id); setCopyState('idle') }}><PlatformIcon id={item.id} />{item.shortName}</button>)}</nav>
+          </section>
+          <div className="preview-caption"><span>{analysis.title || '未命名文章'} · {imageReport.total} 张原稿图片</span><button type="button" className="text-action" aria-expanded={editorOpen} onClick={() => setEditorOpen((open) => !open)}>{editorOpen ? '收起原稿' : '修改原稿 / 选择示例'}</button></div>
           <div className={`live-workspace ${editorOpen ? 'is-editing' : ''}`}>
           {editorOpen && <LeftWorkbench markdown={markdown} stats={analysis.stats} sanitize={sanitize} imageReport={imageReport}
             samples={SAMPLE_ARTICLES} activeSampleId={activeSampleId} localImages={localImageList} imageBusy={imageBusy} saveState={saveState}
@@ -447,15 +452,10 @@ function App() {
             onImportFiles={handleImportFiles} onPicListUpload={handlePicListUpload} onInlineConvert={handleInlineConvert}
             onOpenGuide={() => setGuideOpen(true)} onRemoveImage={handleRemoveImage} />}
           <div className="live-preview">
-          <section className="platform-selection">
-            <div><h2>切换平台，查看成品</h2><p>原稿修改后自动更新预览，发布前请在官方编辑器确认效果。</p></div>
-            <nav className="platform-options" aria-label="选择发布平台">{PLATFORMS.map((item) => <button type="button" key={item.id} aria-pressed={item.id === platformId} onClick={() => { setPlatformId(item.id); setCopyState('idle') }}><PlatformIcon id={item.id} />{item.shortName}</button>)}</nav>
-          </section>
-          <div className="preview-caption"><span>{analysis.title || '未命名文章'} · {imageReport.total} 张原稿图片</span><button type="button" className="text-action" aria-expanded={editorOpen} onClick={() => setEditorOpen((open) => !open)}>{editorOpen ? '收起原稿' : '修改原稿 / 选择示例'}</button></div>
           <CenterPreview platformId={platformId} platform={platform} themeId={themeId} theme={theme} result={displayResult} passport={passport}
             compiling={compiling} compileError={compileError} onThemeChange={(id) => { setThemeId(id); setCopyState('idle') }} onCopyText={handleCopyText} onLocate={handleLocate} onToast={showToast} />
-          <div className="step-actions"><p>{saveState === 'saved' ? '已保存在当前浏览器' : '保存失败，请下载原稿备份'} · 可随时切换平台</p><button type="button" className="primary-action" disabled={!displayResult || compiling} onClick={() => { setStageTab('passport'); setWorkflowStep(3) }}>准备发布 <span aria-hidden="true">→</span></button></div>
           </div></div>
+          <div className="step-actions"><p>{saveState === 'saved' ? '已保存在当前浏览器' : '保存失败，请下载原稿备份'} · 可随时切换平台</p><button type="button" className="primary-action" disabled={!displayResult || compiling} onClick={() => { setStageTab('passport'); setWorkflowStep(3) }}>准备发布 <span aria-hidden="true">→</span></button></div>
         </>}
         {workflowStep === 3 && <section className="publication-workspace">
           <div className="publication-header"><div className="flex items-center gap-3"><PlatformIcon id={platformId} /><div><h2>把文章交给{platform.shortName}</h2><p>{platform.format === 'deck' ? '图集请在预览页下载，这里准备配套文案和素材。' : '先复制适配后的正文，再按需要补齐发布资料。'}</p></div></div><button type="button" className="primary-action" disabled={!displayResult || compiling} onClick={handleCopy}><PrismIcon name="copy" />{copyState === 'copied' && synced[platformId] === copyKeys[platformId] ? '已复制当前内容' : platform.format === 'deck' ? '复制配套文案' : '复制正文'}</button></div>

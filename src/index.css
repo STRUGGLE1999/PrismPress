@@ -267,7 +267,16 @@ button:focus-visible, select:focus-visible, textarea:focus-visible, summary:focu
 .live-workspace.is-editing .editor-toolbar { flex-wrap: wrap; }
 .live-workspace.is-editing .sample-picker { flex-wrap: wrap; }
 .live-workspace.is-editing .sample-picker select { min-width: 0; max-width: 100%; }
-.live-workspace.is-editing .source-textarea { min-height: 540px; }
+@media (min-width: 901px) {
+  .live-workspace.is-editing .article-editor,
+  .live-workspace.is-editing .preview-panel { height: 760px; min-height: 0; }
+  .live-workspace.is-editing .article-editor { display: flex; flex-direction: column; }
+  .live-workspace.is-editing .source-textarea { flex: 1; height: auto; min-height: 0; resize: none; }
+  .live-workspace.is-editing .editor-toolbar,
+  .live-workspace.is-editing .sample-picker,
+  .live-workspace.is-editing .editor-footnote { flex-shrink: 0; }
+  .live-workspace.is-editing .advanced-tools { flex-shrink: 0; max-height: 40%; overflow-y: auto; }
+}
 @media (max-width: 900px) {
   .live-workspace.is-editing { grid-template-columns: minmax(0, 1fr); }
   .live-workspace.is-editing .source-textarea { min-height: 240px; height: 300px; }

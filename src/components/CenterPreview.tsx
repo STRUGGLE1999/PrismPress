@@ -66,7 +66,7 @@ export function CenterPreview({
 
 
   return (
-    <div className="flex min-h-[620px] flex-col overflow-hidden rounded-[22px] border border-[#EAE4DC] bg-white/90 shadow-[0_14px_40px_rgba(39,39,42,0.05)] backdrop-blur-md lg:h-[760px]">
+    <div className="preview-panel flex min-h-[620px] flex-col overflow-hidden rounded-[22px] border border-[#EAE4DC] bg-white/90 shadow-[0_14px_40px_rgba(39,39,42,0.05)] backdrop-blur-md lg:h-[760px]">
       <div className="flex items-center justify-between gap-3 border-b border-[#EAE4DC] px-5 py-3">
         <h2 className="text-sm font-bold">{platform.name} · 排版预览</h2>
         <span className="text-xs text-[#71717A]">{formatClipboard(platform.clipboard, platform.format)}</span>
