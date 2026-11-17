@@ -53,6 +53,7 @@ function PrismMark() {
 const STORAGE_KEY = 'prismpress:workspace:v2'
 
 interface PersistedWorkspace {
+  typographyVersion?: number
   markdown: string
   activeSampleId: string | null
   platformId: PlatformId
@@ -75,7 +76,7 @@ function loadWorkspace(): PersistedWorkspace | null {
       markdown: parsed.markdown,
       activeSampleId: SAMPLE_ARTICLES.some((sample) => sample.id === parsed.activeSampleId) || parsed.activeSampleId === 'real-engineering-csdn' ? parsed.activeSampleId! : null,
       platformId: validPlatform,
-      themeId: parsed.themeId ?? DEFAULT_SAMPLE.themeId,
+      themeId: parsed.typographyVersion === 1 ? parsed.themeId ?? DEFAULT_SAMPLE.themeId : DEFAULT_RICH_THEME_ID,
       synced: parsed.synced ?? {},
     }
   } catch {
@@ -135,6 +136,7 @@ function App() {
   useEffect(() => {
     try {
       const payload: PersistedWorkspace = {
+        typographyVersion: 1,
         markdown,
         activeSampleId,
         platformId,

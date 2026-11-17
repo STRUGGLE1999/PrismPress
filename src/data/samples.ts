@@ -112,7 +112,7 @@ export const SAMPLE_ARTICLES: SampleArticle[] = [
     subtitle: '真实博客原稿 · 7 张 Cloudflare 配图 · 五级框架对比表',
     tag: '真实博客',
     accent: '#7C5CFF',
-    themeId: 'morandi',
+    themeId: 'native',
     markdown: engineeringLevels,
   },
   {
@@ -121,7 +121,7 @@ export const SAMPLE_ARTICLES: SampleArticle[] = [
     subtitle: '真实博客原稿 · 完整正文与 Cloudflare 配图',
     tag: '真实博客',
     accent: '#5BA3A8',
-    themeId: 'morandi',
+    themeId: 'native',
     markdown: agentConcepts,
   },
 ]
@@ -134,6 +134,6 @@ export const CSDN_COMPARISON_SAMPLE: SampleArticle = {
     subtitle: '同篇正文 · 7 张真实 CSDN 图床图片 · 与 Cloudflare 版对照',
     tag: '图床对照',
     accent: '#FC5531',
-    themeId: 'morandi',
+    themeId: 'native',
     markdown: engineeringCsdn,
   }

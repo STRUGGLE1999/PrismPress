@@ -108,17 +108,20 @@ describe('Markdown 阵营', () => {
 
 })
 
-describe('微信公众号 4 套高定主题', () => {
+describe('微信公众号主题', () => {
   it('每套主题输出各自的内联色彩与结构', async () => {
     const markdown = '# 标题\n\n## 核心结论\n\n**重点内容** $ x^2 $\n\n```ts\nconst a = 1\n```'
     const results = await Promise.all(
       RICH_THEMES.map((theme) => compileArticle(markdown, 'wechat', { themeId: theme.id })),
     )
 
-    const parchment = results[0]
-    const morandi = results[1]
-    const warm = results[2]
-    const terminal = results[3]
+    const native = results[0]
+    const parchment = results[1]
+    const morandi = results[2]
+    const warm = results[3]
+    const terminal = results[4]
+    expect(native.body).toContain('background:#FFFFFF')
+    expect(native.body).toContain('font-size:17px;line-height:1.6;')
 
     expect(parchment.body).toContain('#FAF7F0')
     expect(parchment.body).toContain('border-bottom:3px double')
@@ -255,7 +258,7 @@ describe('公众号正文排版', () => {
     const result = await compileArticle('# 标题\n\n中文与 English 混排正文。\n\n```js\nconst count = 1\n```', 'wechat', { themeId })
     const containerStyle = result.body.match(/^<section style="([^"]*)"/)?.[1]
     expect(containerStyle).toContain('Microsoft YaHei')
-    expect(containerStyle).toContain('font-size:16px;line-height:1.75;')
+    expect(containerStyle).toContain(themeId === 'native' ? 'font-size:17px;line-height:1.6;' : 'font-size:16px;line-height:1.75;')
     expect(result.body).toContain('letter-spacing:normal;')
     expect(result.body).not.toMatch(/font-family:"/)
   })

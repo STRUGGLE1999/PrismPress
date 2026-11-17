@@ -184,6 +184,7 @@ function renderHeading(node: Heading, ctx: RenderContext): string {
   }
 
   if (platform.id === 'wechat') {
+    if (theme.preset === 'native') return `<h${Math.min(node.depth, 4)} style="margin:24px 0 12px;font-size:${node.depth <= 2 ? 20 : 17}px;line-height:1.4;font-weight:600;color:${theme.heading};">${content}</h${Math.min(node.depth, 4)}>`
     return renderWechatHeading(node, content, ctx)
   }
 
@@ -276,6 +277,7 @@ function renderBlockquote(node: Blockquote, ctx: RenderContext): string {
   const { theme } = ctx
   const content = node.children.map((child) => renderNode(child, ctx)).join('')
 
+  if (ctx.platform.id === 'wechat' && theme.preset === 'native') return `<blockquote style="margin:20px 0;padding:0 0 0 12px;border-left:3px solid #E5E5E5;color:#888888;">${content}</blockquote>`
   if (theme.quoteStyle === 'double') {
     return `<blockquote style="margin:24px 0;padding:14px 18px;border-top:3px double ${theme.accent};border-bottom:3px double ${theme.accent};background:${theme.quoteBackground};color:${theme.text};font-style:italic;">${content}</blockquote>`
   }
@@ -406,9 +408,10 @@ function renderNode(node: RootContent, ctx: RenderContext): string {
       const paragraph = node as Paragraph
       const wechat = ctx.platform.id === 'wechat'
       const spacing = wechat ? 'normal' : theme.preset === 'parchment' ? '0.04em' : '0.01em'
-      const lineHeight = wechat ? '1.75' : '1.88'
+      const lineHeight = ctx.platform.id === 'zhihu' ? '1.8' : ctx.platform.id === 'bilibili' ? '1.8' : theme.preset === 'native' && wechat ? '1.6' : '1.75'
+      const size = wechat && theme.preset === 'native' ? 17 : 16
       return withSourceLine(
-        `<p style="margin:0 0 16px;font-size:16px;line-height:${lineHeight};color:${theme.text};letter-spacing:${spacing};">${inlineChildren(paragraph.children, ctx)}</p>`,
+        `<p style="margin:0 0 16px;font-size:${size}px;line-height:${lineHeight};color:${theme.text};letter-spacing:${spacing};">${inlineChildren(paragraph.children, ctx)}</p>`,
         node,
         ctx,
       )
@@ -543,7 +546,7 @@ export async function renderRichDocument(
   const references = renderReferences(ctx, options.referenceTitle ?? '参考资料')
   const html =
     options.platform.id === 'wechat'
-      ? `<section style="font-family:${options.theme.fontFamily};font-size:16px;line-height:1.75;color:${options.theme.text};background:${options.theme.paper};padding:2px;word-break:break-word;-webkit-text-size-adjust:100%;">${body}${references}</section>`
+      ? `<section style="font-family:${options.theme.fontFamily};font-size:${options.theme.preset === 'native' ? 17 : 16}px;line-height:${options.theme.preset === 'native' ? '1.6' : '1.75'};color:${options.theme.text};background:${options.theme.paper};padding:2px;word-break:break-word;-webkit-text-size-adjust:100%;">${body}${references}</section>`
       : `${body}${references}`
 
   return {

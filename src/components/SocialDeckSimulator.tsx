@@ -98,7 +98,7 @@ async function renderSlideToCanvas(
   const mutedColor = isDouyin ? '#64748B' : '#94A3B8'
 
   ctx.fillStyle = primaryColor
-  ctx.font = '700 24px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif'
+  ctx.font = '700 24px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", Arial, sans-serif'
   ctx.fillText(slide.kicker, pad, 108)
 
   ctx.textAlign = 'right'
@@ -109,7 +109,7 @@ async function renderSlideToCanvas(
 
   // Title
   ctx.fillStyle = titleColor
-  ctx.font = `800 ${slide.kind === 'cover' ? 68 : 54}px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif`
+  ctx.font = `800 ${slide.kind === 'cover' ? 68 : 54}px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", Arial, sans-serif`
   const titleLines = wrapCanvasLines(ctx, slide.title, width - pad * 2, 3)
   let y = 195
   for (const line of titleLines) {
@@ -125,7 +125,7 @@ async function renderSlideToCanvas(
 
   if (slide.subtitle) {
     ctx.fillStyle = isDouyin ? '#25F4EE' : '#E11D48'
-    ctx.font = '600 32px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif'
+    ctx.font = '600 32px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", Arial, sans-serif'
     const subLines = wrapCanvasLines(ctx, slide.subtitle, width - pad * 2, 2)
     for (const line of subLines) {
       ctx.fillText(line, pad, y)
@@ -135,9 +135,9 @@ async function renderSlideToCanvas(
   }
 
   const contentWidth = width - pad * 2
-  ctx.font = '500 32px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif'
+  ctx.font = '500 32px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", Arial, sans-serif'
   const bulletLines = slide.bullets.map((bullet) => wrapCanvasLines(ctx, bullet, contentWidth - 84, 3))
-  ctx.font = '600 30px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif'
+  ctx.font = '600 30px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", Arial, sans-serif'
   const quoteLines = slide.quote ? wrapCanvasLines(ctx, `“${slide.quote}”`, contentWidth - 56, 3) : []
   const highlightLines = slide.highlight ? wrapCanvasLines(ctx, slide.highlight, contentWidth - 56, 3) : []
   const rows = slide.tableRows ?? []
@@ -183,7 +183,7 @@ async function renderSlideToCanvas(
     ctx.font = '800 30px "SFMono-Regular", Menlo, monospace'
     ctx.fillText(String(index + 1).padStart(2, '0'), pad + 26, y + 54)
     ctx.fillStyle = bodyColor
-    ctx.font = '500 32px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif'
+    ctx.font = '500 32px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", Arial, sans-serif'
     lines.forEach((line, lineIndex) => ctx.fillText(line, pad + 82, y + 54 + lineIndex * 48))
     y += boxHeight + 22
   })
@@ -199,7 +199,7 @@ async function renderSlideToCanvas(
       ctx.strokeStyle = isDouyin ? '#334155' : '#E2E8F0'
       ctx.strokeRect(pad, y, contentWidth, 68)
       ctx.fillStyle = rowIndex === 0 ? primaryColor : bodyColor
-      ctx.font = `${rowIndex === 0 ? 700 : 500} 26px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif`
+      ctx.font = `${rowIndex === 0 ? 700 : 500} 26px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", Arial, sans-serif`
       row.forEach((cell, columnIndex) => {
         const text = wrapCanvasLines(ctx, cell, columnWidth - 28, 1)[0] ?? ''
         ctx.fillText(text, pad + columnIndex * columnWidth + 14, y + 43)
@@ -226,7 +226,7 @@ async function renderSlideToCanvas(
     ctx.roundRect(pad, y, contentWidth, boxHeight, 20)
     ctx.fill()
     ctx.fillStyle = isDouyin ? '#A5F3FC' : '#BE123C'
-    ctx.font = '600 30px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif'
+    ctx.font = '600 30px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", Arial, sans-serif'
     lines.forEach((line, index) => ctx.fillText(line, pad + 28, y + 44 + index * 44))
     y += boxHeight + 24
   }
@@ -234,7 +234,7 @@ async function renderSlideToCanvas(
 
   // Footer
   ctx.fillStyle = mutedColor
-  ctx.font = '600 24px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif'
+  ctx.font = '600 24px -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", Arial, sans-serif'
   ctx.fillText('PrismPress 棱镜发布台 · Lavenda', pad, height - 68)
   ctx.textAlign = 'right'
   ctx.fillStyle = primaryColor

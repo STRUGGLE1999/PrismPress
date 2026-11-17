@@ -2,7 +2,7 @@
  * 微信公众号 4 套高定内联主题。
  * 所有视觉差异都收敛为 token + 装饰风格，AST 渲染器无需感知具体模板。
  */
-export type ThemePreset = 'parchment' | 'morandi' | 'warm' | 'terminal'
+export type ThemePreset = 'native' | 'parchment' | 'morandi' | 'warm' | 'terminal'
 
 export interface RichTheme {
   id: ThemePreset
@@ -166,9 +166,18 @@ export const TERMINAL: RichTheme = {
   dark: true,
 }
 
-export const RICH_THEMES: RichTheme[] = [PARCHMENT, MORANDI, WARM, TERMINAL]
+export const NATIVE: RichTheme = {
+  ...MORANDI, id: 'native', name: '微信原生 · 标准正文', preset: 'native',
+  description: '白底黑字与系统字体，接近微信文章的常规阅读样式。',
+  paper: '#FFFFFF', text: '#333333', heading: '#222222', accent: '#576B95',
+  accentSoft: '#F7F7F7', muted: '#888888', border: '#EDEDED',
+  fontFamily: `system-ui, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif`,
+  headingFontFamily: `system-ui, -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif`,
+}
 
-export const DEFAULT_RICH_THEME = MORANDI
+export const RICH_THEMES: RichTheme[] = [NATIVE, PARCHMENT, MORANDI, WARM, TERMINAL]
+
+export const DEFAULT_RICH_THEME = NATIVE
 
 export const DEFAULT_RICH_THEME_ID = DEFAULT_RICH_THEME.id
 

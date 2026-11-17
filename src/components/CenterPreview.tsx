@@ -1,5 +1,5 @@
 import { PrismIcon } from '@/components/PrismIcon'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { MouseEvent } from 'react'
 import type {
   ClipboardMime,
@@ -10,7 +10,7 @@ import type {
   RichTheme,
   ThemePreset,
 } from '@/core'
-import { RICH_THEMES } from '@/core'
+import { RICH_THEMES, analyzeMarkdown, renderRichDocument, getRichTheme } from '@/core'
 import { SocialDeckSimulator } from './SocialDeckSimulator'
 
 interface CenterPreviewProps {
@@ -50,6 +50,17 @@ export function CenterPreview({
   const [viewport, setViewport] = useState<'desktop' | 'mobile'>('desktop')
   const [markdownTab, setMarkdownTab] = useState<'rendered' | 'raw'>('rendered')
 
+  const [markdownPreview, setMarkdownPreview] = useState<{ key: string; html: string } | null>(null)
+  useEffect(() => {
+    if (!result || result.format !== 'markdown') return
+    let active = true
+    const document = analyzeMarkdown(result.sanitize.output)
+    void renderRichDocument(document.root, { platform, theme: getRichTheme('native'), lineMap: result.sanitize.lineMap, stripTopH1: true })
+      .then(({ html }) => { if (active) setMarkdownPreview({ key: result.sanitize.input, html }) })
+      .catch(() => { if (active) setMarkdownPreview(null) })
+    return () => { active = false }
+  }, [result, platform])
+
   const previewHtml =
     result?.format === 'html'
       ? result.body.replace(/^(\s*<section[^>]*>)?\s*<h[12][^>]*>[\s\S]*?<\/h[12]>\s*/i, '$1')
@@ -66,7 +77,7 @@ export function CenterPreview({
 
 
   return (
-    <div className="preview-panel flex min-h-[620px] flex-col overflow-hidden rounded-[22px] border border-[#EAE4DC] bg-white/90 shadow-[0_14px_40px_rgba(39,39,42,0.05)] backdrop-blur-md lg:h-[760px]">
+    <div data-preview-platform={platformId} className="preview-panel flex min-h-[620px] flex-col overflow-hidden rounded-[22px] border border-[#EAE4DC] bg-white/90 shadow-[0_14px_40px_rgba(39,39,42,0.05)] backdrop-blur-md lg:h-[760px]">
       <div className="flex items-center justify-between gap-3 border-b border-[#EAE4DC] px-5 py-3">
         <h2 className="text-sm font-bold">{platform.name} · 排版预览</h2>
         <span className="text-xs text-[#71717A]">{formatClipboard(platform.clipboard, platform.format)}</span>
@@ -315,7 +326,7 @@ export function CenterPreview({
           /* 4. 微信公众号高定模板真机视口 */
           <div
             className="h-full overflow-y-auto p-4 sm:p-6"
-            style={{ backgroundColor: theme.dark ? '#111827' : '#F3F0EA' }}
+            style={{ backgroundColor: theme.preset === 'native' ? '#FFFFFF' : theme.dark ? '#111827' : '#F3F0EA' }}
           >
             <div
               key={`${platformId}-${themeId}-${viewport}`}
@@ -335,7 +346,7 @@ export function CenterPreview({
               >
                 <h1
                   className="text-[21px] font-bold leading-snug"
-                  style={{ color: theme.heading, fontFamily: theme.headingFontFamily }}
+                  style={{ color: theme.heading, fontFamily: theme.headingFontFamily, fontSize: theme.preset === 'native' ? 22 : undefined, fontWeight: theme.preset === 'native' ? 500 : undefined }}
                 >
                   {passport.title}
                 </h1>
@@ -481,30 +492,8 @@ export function CenterPreview({
                     </div>
                   )}
 
-                  <div className="divide-y divide-slate-100 px-6 py-4 font-mono text-[12.5px] leading-7 text-slate-800">
-                    {result.body.split('\n').map((lineText, idx) => {
-                      const mappedLine = result.sanitize.lineMap[idx] ?? idx + 1
-                      const isHeading = /^#{1,6}\s/.test(lineText)
-                      const isToc = /^@\[TOC\]/.test(lineText)
-                      return (
-                        <div
-                          key={idx}
-                          onClick={() => onLocate(mappedLine)}
-                          className={`group flex cursor-pointer items-baseline gap-3 border-none py-0.5 transition hover:bg-slate-100/90 ${
-                            isHeading ? 'py-1.5 font-sans text-[15px] font-bold text-slate-900' : ''
-                          } ${isToc ? 'font-bold text-[#FC5531]' : ''}`}
-                          title={`点击定位到左侧源码第 ${mappedLine} 行`}
-                        >
-                          <span className="w-7 shrink-0 select-none text-right font-mono text-[10px] text-slate-400 group-hover:text-slate-700">
-                            L{idx + 1}
-                          </span>
-                          <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">
-                            {lineText || ' '}
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
+                  <div className="rich-preview platform-article px-6 py-5" onClick={handlePreviewClick}
+                    dangerouslySetInnerHTML={{ __html: markdownPreview?.key === result.sanitize.input ? markdownPreview.html : '<p>正在生成文章预览…</p>' }} />
                 </div>
               </div>
             )}

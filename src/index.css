@@ -285,3 +285,16 @@ button:focus-visible, select:focus-visible, textarea:focus-visible, summary:focu
   .workspace-toolbar { align-items: stretch; flex-direction: column; }
   .workspace-toolbar > .secondary-action { align-self: flex-start; }
 }
+
+/* Reading typography varies by destination; code/source views keep monospace. */
+[data-preview-platform="zhihu"] .rich-preview,
+[data-preview-platform="csdn"] .rich-preview,
+[data-preview-platform="juejin"] .rich-preview,
+[data-preview-platform="bilibili"] .rich-preview { font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif; color: #333; }
+.platform-article p { font-family: inherit; letter-spacing: normal !important; }
+.platform-article h1, .platform-article h2, .platform-article h3, .platform-article h4 { background: none !important; border: 0 !important; padding: 0 !important; color: #252933 !important; text-align: left !important; }
+[data-preview-platform="juejin"] .platform-article p { font-size: 16px !important; line-height: 1.75 !important; margin-bottom: 16px !important; }
+[data-preview-platform="csdn"] .platform-article p { font-size: 16px !important; line-height: 1.75 !important; margin-bottom: 16px !important; }
+[data-preview-platform="zhihu"] .rich-preview p { font-size: 16px; line-height: 1.8; }
+[data-preview-platform="bilibili"] .rich-preview p { font-size: 16px; line-height: 1.8; }
+[data-preview-platform="xiaohongshu"], [data-preview-platform="douyin"] { font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif; }
