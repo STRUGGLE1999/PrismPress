@@ -5,3 +5,9 @@ dist-ssr
 *.local
 .DS_Store
 *.log
+
+# Local planning records and browser artifacts
+0*.md
+.trae-html-share-packages/
+.playwright-cli/
+output/

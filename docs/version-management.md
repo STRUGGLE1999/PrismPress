@@ -1,8 +1,8 @@
 # 本地版本管理
 
-仓库只在本地建立，尚未连接远程服务。
+公开仓库：https://github.com/STRUGGLE1999/PrismPress 。本地实名规划记录、对话与浏览器产物未上传；发布前原始历史保存在本机 `.git/local-backups/before-public.bundle`。
 
-- `main`：本次调整前的完整基线，提交 `8b47fa2`。
+- `main`：本次调整前的完整基线，使用标签 `baseline-before-preview` 定位。
 - `baseline-before-preview`：同一基线的固定标签。
 - `feat/immediate-platform-preview`：导入即预览及标签页图标调整。
 
