@@ -11,7 +11,6 @@ import {
   generatePassport,
   getPlatform,
   getRichTheme,
-  replaceImageReference,
   sanitizeMarkdown,
   scanImages,
   uploadToPicList,
@@ -25,6 +24,8 @@ import { RightPassport } from '@/components/RightPassport'
 
 type PublishTab = 'passport' | 'covers' | 'relay'
 import { PicListGuideModal } from '@/components/PicListGuideModal'
+import { detachInlineImages, materializeImages, imageChangeKey } from '@/components/imageWorkspace'
+import { loadImageAssets, saveImageAssets } from '@/components/imageStorage'
 import type { LocalImageAsset } from '@/components/localImage'
 import prismBrandImage from '../assets/brand/prismpress-brand-transparent.png'
 
@@ -86,7 +87,8 @@ function loadWorkspace(): PersistedWorkspace | null {
 
 function App() {
   const initial = useMemo(() => loadWorkspace(), [])
-  const [markdown, setMarkdown] = useState(initial?.markdown ?? DEFAULT_SAMPLE.markdown)
+  const recovered = useMemo(() => detachInlineImages(initial?.markdown ?? DEFAULT_SAMPLE.markdown), [initial])
+  const [markdown, setMarkdown] = useState(recovered.markdown)
   const [activeSampleId, setActiveSampleId] = useState<string | null>(
     initial ? initial.activeSampleId : DEFAULT_SAMPLE.id,
   )
@@ -97,17 +99,18 @@ function App() {
   const importInput = useRef<HTMLInputElement>(null)
   const folderInput = useRef<HTMLInputElement>(null)
   const [stageTab, setStageTab] = useState<PublishTab>('passport')
-  const [saveState, setSaveState] = useState<'saved' | 'error'>('saved')
+  const [saveState, setSaveState] = useState<'saving' | 'saved' | 'error'>('saving')
   const [result, setResult] = useState<CompileResult | null>(null)
   const [compiledTheme, setCompiledTheme] = useState<ThemePreset>(initial?.themeId ?? DEFAULT_SAMPLE.themeId)
   const [compiling, setCompiling] = useState(true)
   const [compileError, setCompileError] = useState<string | null>(null)
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
   const [toast, setToast] = useState<ToastState | null>(null)
-  const [localImages, setLocalImages] = useState<Record<string, LocalImageAsset>>({})
+  const [localImages, setLocalImages] = useState<Record<string, LocalImageAsset>>(recovered.assets)
+  const [assetsReady, setAssetsReady] = useState(false)
   const [imageBusy, setImageBusy] = useState<'piclist' | 'inline' | null>(null)
   const [guideOpen, setGuideOpen] = useState(false)
-  const [synced, setSynced] = useState<Partial<Record<PlatformId, string>>>(initial?.synced ?? {})
+  const [synced, setSynced] = useState<Partial<Record<PlatformId, string>>>(Object.keys(recovered.assets).length ? {} : initial?.synced ?? {})
   const [relaying, setRelaying] = useState<PlatformId | null>(null)
   const [locateRequest, setLocateRequest] = useState<{ line: number; nonce: number } | null>(null)
   const locateNonce = useRef(0)
@@ -118,15 +121,17 @@ function App() {
   const effectiveThemeId = platformId === 'wechat' ? themeId : DEFAULT_RICH_THEME_ID
   const theme = getRichTheme(effectiveThemeId)
 
+  const resolvedMarkdown = useMemo(() => materializeImages(markdown, localImages), [markdown, localImages])
+  const contentKey = useMemo(() => imageChangeKey(resolvedMarkdown), [resolvedMarkdown])
   const sanitize = useMemo(() => sanitizeMarkdown(markdown), [markdown])
   const analysis = useMemo(() => analyzeMarkdown(sanitize.output), [sanitize.output])
   const imageReport = useMemo(
-    () => scanImages(analysis.images, sanitize.output),
-    [analysis.images, sanitize.output],
+    () => scanImages(analyzeMarkdown(resolvedMarkdown).images, resolvedMarkdown),
+    [resolvedMarkdown],
   )
   const passport = useMemo(() => generatePassport(markdown), [markdown])
   const localImageList = useMemo(() => Object.values(localImages), [localImages])
-  const copyKeys = useMemo(() => Object.fromEntries(PLATFORMS.map((item) => [item.id, `${item.id === 'wechat' ? themeId : DEFAULT_RICH_THEME_ID}\n${markdown}`])) as Record<PlatformId, string>, [markdown, themeId])
+  const copyKeys = useMemo(() => Object.fromEntries(PLATFORMS.map((item) => [item.id, `${item.id === 'wechat' ? themeId : DEFAULT_RICH_THEME_ID}\n${contentKey}`])) as Record<PlatformId, string>, [contentKey, themeId])
 
   const showToast = useCallback((message: string, tone: ToastTone = 'info') => {
     setToast({ message, tone, id: Date.now() })
@@ -135,21 +140,27 @@ function App() {
   }, [])
 
   useEffect(() => {
-    try {
-      const payload: PersistedWorkspace = {
-        typographyVersion: 1,
-        markdown,
-        activeSampleId,
-        platformId,
-        themeId,
-        synced,
-      }
+    let active = true
+    void loadImageAssets().then((assets) => {
+      if (active) setLocalImages((current) => ({ ...assets, ...current }))
+    }).catch(() => { if (active) setSaveState('error') })
+      .finally(() => { if (active) setAssetsReady(true) })
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    if (!assetsReady) return
+    let active = true
+    setSaveState('saving')
+    const payload: PersistedWorkspace = { typographyVersion: 1, markdown, activeSampleId, platformId, themeId, synced }
+    // Save pictures before replacing an older draft containing embedded data.
+    void saveImageAssets(localImages).then(() => {
+      if (!active) return
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
       setSaveState('saved')
-    } catch {
-      setSaveState('error')
-    }
-  }, [markdown, activeSampleId, platformId, themeId, synced])
+    }).catch(() => { if (active) setSaveState('error') })
+    return () => { active = false }
+  }, [assetsReady, markdown, activeSampleId, platformId, themeId, synced, localImages])
 
   useEffect(() => {
     return () => {
@@ -164,7 +175,7 @@ function App() {
     setCompileError(null)
 
     const timer = window.setTimeout(() => {
-      compileArticle(markdown, platformId, { themeId: effectiveThemeId })
+      compileArticle(resolvedMarkdown, platformId, { themeId: effectiveThemeId })
         .then((compiled) => {
           if (!alive) return
           setResult(compiled)
@@ -182,12 +193,12 @@ function App() {
       alive = false
       window.clearTimeout(timer)
     }
-  }, [markdown, platformId, effectiveThemeId])
+  }, [resolvedMarkdown, platformId, effectiveThemeId])
 
   const displayResult =
     result &&
     result.platform.id === platformId &&
-    result.sanitize.input === markdown &&
+    result.sanitize.input === resolvedMarkdown &&
     compiledTheme === effectiveThemeId
       ? result
       : null
@@ -228,14 +239,6 @@ function App() {
     }
 
     const imagePath = (file: File) => file.webkitRelativePath || file.name
-    const paths = [...new Set([...Object.keys(localImages), ...imageFiles.map(imagePath)])]
-    const uniqueBaseName = (path: string) => paths.filter((candidate) => candidate.split('/').pop() === path.split('/').pop()).length === 1
-    // Reuse already imported pictures when the article is selected afterwards.
-    if (loadedMarkdown) {
-      for (const asset of Object.values(localImages)) {
-        next = replaceImageReference(next, asset.name, asset.remoteUrl ?? asset.dataUrl, uniqueBaseName(asset.name))
-      }
-    }
     const additions: Record<string, LocalImageAsset> = {}
     for (const file of imageFiles) {
       try {
@@ -249,7 +252,6 @@ function App() {
           bytes: compressed.bytes,
           mode: 'inline',
         }
-        next = replaceImageReference(next, path, compressed.dataUrl, uniqueBaseName(path))
       } catch {
         showToast(`图片「${file.name}」处理失败`, 'error')
       }
@@ -268,18 +270,19 @@ function App() {
       setEditorOpen(false)
     }
 
-    const missing = scanImages(analyzeMarkdown(next).images, next).findings.filter((item) => item.health === 'red')
+    const readySource = materializeImages(next, { ...localImages, ...additions })
+    const missing = scanImages(analyzeMarkdown(readySource).images, readySource).findings.filter((item) => item.health === 'red')
     const processed = Object.keys(additions).length
     if (missing.length > 0) {
       showToast(`文章已导入，仍有 ${missing.length} 张图片未读入。请选择包含配图的文件夹。`, 'info')
     } else if (imageFiles.length > processed) {
       showToast(`已处理 ${processed} 张图片，${imageFiles.length - processed} 张处理失败，请检查文件。`, 'error')
     } else if (loadedMarkdown && imageFiles.length > 0) {
-      showToast(`已导入 Markdown，并内联 ${imageFiles.length} 张图片`, 'success')
+      showToast(`已导入 Markdown，并关联 ${imageFiles.length} 张图片`, 'success')
     } else if (loadedMarkdown) {
       showToast(`已导入「${markdownFiles[0]?.name ?? 'Markdown'}」`, 'success')
     } else if (imageFiles.length > 0) {
-      showToast(`已内联 ${imageFiles.length} 张图片，发布前请检查平台是否接受`, 'success')
+      showToast(`已关联 ${imageFiles.length} 张图片，复制时会自动携带图片数据`, 'success')
     } else {
       showToast('未识别到可导入文件，请拖入 .md 或图片', 'error')
     }
@@ -293,14 +296,12 @@ function App() {
     }
 
     setImageBusy('piclist')
-    let next = markdown
     const updates: Record<string, LocalImageAsset> = {}
     const errors: string[] = []
 
     for (const asset of assets) {
       try {
         const url = await uploadToPicList(asset.file)
-        next = replaceImageReference(next, asset.name, url)
         updates[asset.name] = { ...asset, mode: 'remote', remoteUrl: url }
       } catch (error) {
         errors.push(error instanceof Error ? error.message : `「${asset.name}」上传失败`)
@@ -316,15 +317,11 @@ function App() {
         return merged
       })
     }
-    if (next !== markdown) {
-      setMarkdown(next)
-      setCopyState('idle')
-    }
 
     if (errors.length > 0) {
       showToast(errors[0], 'error')
     } else {
-      showToast(`已上传 ${Object.keys(updates).length} 张图片并替换为图床链接`, 'success')
+      showToast(`已上传 ${Object.keys(updates).length} 张图片，预览和复制将使用图床链接`, 'success')
     }
     setImageBusy(null)
   }
@@ -336,11 +333,6 @@ function App() {
       return
     }
     setImageBusy('inline')
-    let next = markdown
-    for (const asset of assets) {
-      next = replaceImageReference(next, asset.name, asset.dataUrl)
-    }
-    setMarkdown(next)
     setLocalImages((previous) => {
       const merged = { ...previous }
       for (const asset of assets) {
@@ -349,7 +341,7 @@ function App() {
       return merged
     })
     setImageBusy(null)
-    showToast(`已将 ${assets.length} 张图片内联，请在目标编辑器检查兼容性`, 'success')
+    showToast(`已切换为本地图片模式，复制时自动携带图片数据`, 'success')
   }
 
   const handleRemoveImage = (name: string) => {
@@ -402,11 +394,11 @@ function App() {
       const reusable =
         result &&
         result.platform.id === id &&
-        result.sanitize.input === markdown &&
+        result.sanitize.input === resolvedMarkdown &&
         compiledTheme === targetThemeId
           ? result
           : null
-      const compiled = reusable ?? (await compileArticle(markdown, id, { themeId: targetThemeId }))
+      const compiled = reusable ?? (await compileArticle(resolvedMarkdown, id, { themeId: targetThemeId }))
       await copyCompiledArticle(compiled)
 
       if (popup && !popup.closed) {
@@ -458,7 +450,7 @@ function App() {
             <button type="button" className="secondary-action" onClick={() => folderInput.current?.click()}>导入配图文件夹</button>
           </div>
         </div>
-        {saveState === 'error' && <div className="save-warning" role="alert">当前浏览器未能保存草稿。请先<button type="button" onClick={downloadSource}>下载原稿备份</button>，避免刷新后丢失修改。</div>}
+        {saveState === 'error' && <div className="save-warning" role="alert">当前浏览器未能保存草稿。请先<button type="button" onClick={downloadSource}>下载原稿备份</button>并保留原始配图文件夹，避免刷新后丢失修改。</div>}
         {workflowStep !== 3 && <>
           <section className="platform-selection">
             <div><h2>切换平台，查看成品</h2><p>原稿修改后自动更新预览，发布前请在官方编辑器确认效果。</p></div>
@@ -481,7 +473,7 @@ function App() {
           <CenterPreview platformId={platformId} platform={platform} themeId={themeId} theme={theme} result={displayResult} passport={passport}
             compiling={compiling} compileError={compileError} onThemeChange={(id) => { setThemeId(id); setCopyState('idle') }} onCopyText={handleCopyText} onLocate={handleLocate} onToast={showToast} />
           </div></div>
-          <div className="step-actions"><p>{saveState === 'saved' ? '已保存在当前浏览器' : '保存失败，请下载原稿备份'} · 可随时切换平台</p><button type="button" className="primary-action" disabled={!displayResult || compiling} onClick={() => { setStageTab('passport'); setWorkflowStep(3) }}>准备发布 <span aria-hidden="true">→</span></button></div>
+          <div className="step-actions"><p>{saveState === 'saving' ? '正在保存原稿与配图…' : saveState === 'saved' ? '原稿与配图已保存' : '保存失败，请保留原稿与配图'} · 可随时切换平台</p><button type="button" className="primary-action" disabled={!displayResult || compiling} onClick={() => { setStageTab('passport'); setWorkflowStep(3) }}>准备发布 <span aria-hidden="true">→</span></button></div>
         </>}
         {workflowStep === 3 && <section className="publication-workspace">
           <div className="publication-header"><div className="flex items-center gap-3"><PlatformIcon id={platformId} /><div><h2>把文章交给{platform.shortName}</h2><p>{platform.format === 'deck' ? '图集请在预览页下载，这里准备配套文案和素材。' : '先复制适配后的正文，再按需要补齐发布资料。'}</p></div></div><button type="button" className="primary-action" disabled={!displayResult || compiling} onClick={handleCopy}><PrismIcon name="copy" />{copyState === 'copied' && synced[platformId] === copyKeys[platformId] ? '已复制当前内容' : platform.format === 'deck' ? '复制配套文案' : '复制正文'}</button></div>
@@ -492,7 +484,7 @@ function App() {
             section={stageTab} onCopyText={handleCopyText} onRelay={handleRelay} onSelectPlatform={(id) => { setPlatformId(id); setCopyState('idle'); setWorkflowStep(2) }} onToast={showToast} />
           <div className="step-actions inside"><button type="button" className="text-action" onClick={() => setWorkflowStep(2)}>← 返回平台预览</button>{stageTab !== 'relay' && <button type="button" className="secondary-action" onClick={() => setStageTab('relay')}>继续：打开发布页 →</button>}</div>
         </section>}
-        <footer className="product-footer"><span>本地处理 · 无需绑定平台账号</span><details><summary>使用与隐私说明</summary><p>原稿和复制记录保存在当前浏览器，清理浏览器数据会删除它们。请下载原稿备份。远程图片会请求对应图床；只有主动点击上传时才请求本机 PicList。PrismPress 不替你登录或发布，粘贴后的排版与图片仍需在官方编辑器确认。</p></details></footer>
+        <footer className="product-footer"><span>本地处理 · 无需绑定平台账号</span><details><summary>使用与隐私说明</summary><p>原稿、配图和复制记录保存在当前浏览器，清理浏览器数据会删除它们。请下载原稿备份。远程图片会请求对应图床；只有主动点击上传时才请求本机 PicList。PrismPress 不替你登录或发布，粘贴后的排版与图片仍需在官方编辑器确认。</p></details></footer>
       </main>
 
       <PicListGuideModal open={guideOpen} onClose={() => setGuideOpen(false)} onToast={showToast} />

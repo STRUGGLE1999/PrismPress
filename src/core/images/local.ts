@@ -29,7 +29,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 
 /**
  * 前端免配置图片内联：FileReader + Canvas 等比压缩。
- * 生成 data URI 后直接替换 Markdown 中的相对路径，七端预览/复制立即可见。
+ * 图片数据由工作区单独管理，生成预览和剪贴板内容时再关联。
  */
 export async function compressImageToDataUrl(
   file: File,

@@ -15,7 +15,7 @@ interface LeftWorkbenchProps {
   activeSampleId: string | null
   localImages: LocalImageAsset[]
   imageBusy: 'piclist' | 'inline' | null
-  saveState: 'saved' | 'error'
+  saveState: 'saving' | 'saved' | 'error'
   locateRequest: { line: number; nonce: number } | null
   onMarkdownChange: (value: string) => void
   onSelectSample: (sample: SampleArticle) => void
@@ -109,7 +109,7 @@ export function LeftWorkbench({ markdown, stats, sanitize, imageReport, samples,
         spellCheck={false} className="source-textarea" placeholder="# 输入文章标题\n\n在这里粘贴 Markdown 正文，也可以拖入 .md 文件和配图。" />
       <div className="editor-footnote">
         <span>{stats.characters.toLocaleString('zh-CN')} 字 · {imageReport.total} 张图片 · 约 {stats.readingMinutes} 分钟阅读</span>
-        <span role="status">{locatedLine !== null ? `已定位原稿第 ${locatedLine} 行 · ` : ''}{saveState === 'saved' ? '已保存在当前浏览器' : '保存失败，请下载备份'}</span>
+        <span role="status">{locatedLine !== null ? `已定位原稿第 ${locatedLine} 行 · ` : ''}{saveState === 'saving' ? '正在保存原稿与配图…' : saveState === 'saved' ? '原稿与配图已保存' : '保存失败，请保留原稿与配图'}</span>
       </div>
       <details className="advanced-tools">
         <summary>格式检查与图片工具 <span>{totalFixes ? `${totalFixes} 处格式已整理` : '格式检查已完成'}{imageReport.red + imageReport.yellow > 0 ? ` · ${imageReport.red + imageReport.yellow} 张图片需关注` : ''}</span></summary>
@@ -133,9 +133,9 @@ export function LeftWorkbench({ markdown, stats, sanitize, imageReport, samples,
             </div>)}
             <div className="flex flex-wrap gap-2">
               <button type="button" className="secondary-action" disabled={imageBusy !== null} onClick={onPicListUpload}>{imageBusy === 'piclist' ? '上传中…' : '上传到 PicList 默认图床'}</button>
-              <button type="button" className="secondary-action" disabled={imageBusy !== null} onClick={onInlineConvert}>转为内联图片</button>
+              <button type="button" className="secondary-action" disabled={imageBusy !== null} onClick={onInlineConvert}>使用本地图片</button>
             </div>
-            <p>内联图片可用于本地预览，目标编辑器可能不接受，粘贴后请检查。</p>
+            <p>原稿保留短路径；复制正文时自动携带图片数据。公众号粘贴后仍需检查图片转存结果。</p>
           </div>}
           <div className="flex flex-wrap gap-3">
             <button type="button" className="text-action" onClick={onOpenGuide}>PicList 配置说明</button>
