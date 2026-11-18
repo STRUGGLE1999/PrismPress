@@ -503,11 +503,11 @@ function App() {
           <nav className="publication-tabs" aria-label="发布准备选项">
             {([{ id: 'passport', label: '标题与摘要' }, { id: 'covers', label: '封面（可选）' }, { id: 'relay', label: '打开发布页' }] as const).map((item) => <button type="button" key={item.id} aria-current={stageTab === item.id ? 'page' : undefined} onClick={() => setStageTab(item.id)}>{item.label}</button>)}
           </nav>
-          <RightPassport passport={passport} platform={platform} platforms={PLATFORMS} theme={theme} copyKeys={copyKeys} synced={synced} relaying={relaying}
+          <RightPassport markdown={markdown} passport={passport} platform={platform} platforms={PLATFORMS} theme={theme} copyKeys={copyKeys} synced={synced} relaying={relaying}
             section={stageTab} onCopyText={handleCopyText} onRelay={handleRelay} onSelectPlatform={(id) => { setPlatformId(id); setCopyState('idle'); setWorkflowStep(2) }} onToast={showToast} />
           <div className="step-actions inside"><button type="button" className="text-action" onClick={() => setWorkflowStep(2)}>← 返回平台预览</button>{stageTab !== 'relay' && <button type="button" className="secondary-action" onClick={() => setStageTab('relay')}>继续：打开发布页 →</button>}</div>
         </section>}
-        <footer className="product-footer"><span>本地处理 · 无需绑定平台账号</span><details><summary>使用与隐私说明</summary><p>原稿、配图和复制记录保存在当前浏览器，清理浏览器数据会删除它们。请下载原稿备份。远程图片会请求对应图床；只有主动点击上传时才请求本机 PicList。PrismPress 不替你登录或发布，粘贴后的排版与图片仍需在官方编辑器确认。</p></details></footer>
+        <footer className="product-footer"><span>原稿本机保存 · 无需绑定平台账号</span><details><summary>使用与隐私说明</summary><p>原稿、配图和复制记录保存在当前浏览器，清理浏览器数据会删除它们。请下载原稿备份。远程图片会请求对应图床；只有主动点击上传时才请求本机 PicList。仅主动点击生成封面时，标题与正文参考会经服务端发送至 AIArtMirror；封面保存在当前浏览器。PrismPress 不替你登录或发布，粘贴后的排版与图片仍需在官方编辑器确认。</p></details></footer>
       </main>
 
       <PicListGuideModal open={guideOpen} onClose={() => setGuideOpen(false)} onToast={showToast} />

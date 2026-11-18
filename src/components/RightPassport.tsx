@@ -1,8 +1,9 @@
 import type { MetadataPassport, PlatformId, PlatformProfile, RichTheme } from '@/core'
-import { CoverStudio, getCoverCollection } from './CoverStudio'
+import { CoverStudio } from './CoverStudio'
 import { PlatformIcon, PrismIcon } from './PrismIcon'
 
 interface RightPassportProps {
+  markdown: string
   passport: MetadataPassport
   platform: PlatformProfile
   platforms: PlatformProfile[]
@@ -17,15 +18,14 @@ interface RightPassportProps {
   onToast: (message: string, tone?: 'success' | 'error' | 'info') => void
 }
 
-export function RightPassport({ passport, platform, platforms, theme, copyKeys, synced, relaying,
+export function RightPassport({ markdown, passport, platform, platforms, theme, copyKeys, synced, relaying,
   section, onCopyText, onRelay, onSelectPlatform, onToast,
 }: RightPassportProps) {
   if (section === 'covers') {
-    const collection = getCoverCollection(passport.title)
     return <section className="publication-panel">
       <h2>为这篇文章准备封面</h2>
-      <p className="section-description">{collection ? `${collection.label} · 三种比例各自设计，可直接下载。` : '封面是可选素材，不影响正文复制。'}</p>
-      <CoverStudio title={passport.title} theme={theme} category={passport.category.generic} onToast={onToast} />
+      <p className="section-description">根据当前正文生成所选比例，生成后可下载；封面是可选素材。</p>
+      <CoverStudio markdown={markdown} title={passport.title} theme={theme} category={passport.category.generic} onToast={onToast} />
     </section>
   }
 

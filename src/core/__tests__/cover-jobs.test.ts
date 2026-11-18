@@ -1,0 +1,26 @@
+import { expect, it, vi } from 'vitest'
+import { pendingCover, startCover } from '../../components/coverJobs'
+
+it('keeps one paid task when its caller leaves and another resumes', async () => {
+  let finish!: (value: { blob: Blob; saved: boolean }) => void
+  const generate = vi.fn(() => new Promise<{ blob: Blob; saved: boolean }>((resolve) => { finish = resolve }))
+  const first = startCover('article:16x9', generate)
+  const resumed = pendingCover('article:16x9')
+  expect(startCover('article:16x9', generate)).toBe(first)
+  expect(resumed).toBe(first)
+  expect(generate).toHaveBeenCalledTimes(1)
+  const image = new Blob(['png'])
+  finish({ blob: image, saved: true })
+  expect((await resumed)?.blob).toBe(image)
+  await Promise.resolve()
+  expect(pendingCover('article:16x9')).toBeUndefined()
+})
+
+it('clears a failed task so an explicit retry can run', async () => {
+  const failed = startCover('failed', () => Promise.reject(new Error('provider error')))
+  await expect(failed).rejects.toThrow('provider error')
+  await Promise.resolve()
+  expect(pendingCover('failed')).toBeUndefined()
+  const result = await startCover('failed', async () => ({ blob: new Blob(), saved: true }))
+  expect(result.saved).toBe(true)
+})
