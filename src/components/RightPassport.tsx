@@ -12,6 +12,7 @@ interface RightPassportProps {
   synced: Partial<Record<PlatformId, string>>
   relaying: PlatformId | null
   section: 'passport' | 'covers' | 'relay'
+  checkSummary?: string
   onCopyText: (text: string, label: string) => void
   onRelay: (id: PlatformId) => void
   onSelectPlatform: (id: PlatformId) => void
@@ -19,7 +20,7 @@ interface RightPassportProps {
 }
 
 export function RightPassport({ markdown, passport, platform, platforms, theme, copyKeys, synced, relaying,
-  section, onCopyText, onRelay, onSelectPlatform, onToast,
+  section, checkSummary, onCopyText, onRelay, onSelectPlatform, onToast,
 }: RightPassportProps) {
   if (section === 'covers') {
     return <section className="publication-panel">
@@ -39,6 +40,7 @@ export function RightPassport({ markdown, passport, platform, platforms, theme, 
         <li><span>2</span><div><strong>粘贴并检查</strong><p>粘贴正文，补充标题、摘要、标签与封面；尤其检查图片和公式。</p></div></li>
         <li><span>3</span><div><strong>在平台确认发布</strong><p>登录、原创声明及最终发布均在官方页面完成。本工具无法读取发布结果。</p></div></li>
       </ol>
+      {checkSummary && <p className="mb-3 text-xs text-[#71717A]">发布前检查：{checkSummary}</p>}
       <button type="button" className="primary-action" disabled={relaying !== null} onClick={() => onRelay(platform.id)}>
         <PrismIcon name="publish" /> {relaying === platform.id ? '正在复制…' : `复制并打开${platform.shortName}`}
       </button>

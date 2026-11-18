@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import type { RichTheme } from '@/core'
 import { PrismIcon } from './PrismIcon'
 import { pendingCover, startCover } from './coverJobs'
@@ -107,6 +107,24 @@ function CollectionPreview({ collection, onToast }: {
     }, 'image/png')
   }
 
+  const renderCard = (spec: typeof COVERS[number], ref: RefObject<HTMLCanvasElement | null>) => (
+    <div key={spec.key} className="overflow-hidden rounded-xl border border-[#EAE4DC] bg-white">
+      <div className="relative bg-[#FAF8F5]">
+        <canvas ref={ref} width={spec.width} height={spec.height} className={`block h-auto w-full ${phase === 'ready' ? '' : 'invisible'}`} aria-label={`${spec.label}封面预览`} />
+        {phase !== 'ready' && <p role="status" className="absolute inset-0 flex items-center justify-center p-4 text-center text-xs text-[#71717A]">{phase === 'error' ? '封面暂不可用' : '正在加载封面…'}</p>}
+      </div>
+      <div className="flex items-center justify-between gap-3 p-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-[#27272A]">{spec.label}</p>
+          <p className="mt-1 text-[11px] text-[#71717A]">{spec.ratio} · {spec.width}×{spec.height}</p>
+        </div>
+        <button type="button" onClick={() => download(spec, ref.current)} disabled={phase !== 'ready'} className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-[#EAE4DC] px-3 py-2 text-[11px] font-semibold text-[#52525B] transition hover:bg-[#FAF8F5] disabled:opacity-40">
+          <PrismIcon name="download" /> 下载 PNG
+        </button>
+      </div>
+    </div>
+  )
+
   return (
     <div>
       <p className="mb-4 text-xs leading-6 text-[#71717A]">
@@ -118,27 +136,12 @@ function CollectionPreview({ collection, onToast }: {
           <button type="button" onClick={() => { setPhase('loading'); setAttempt((value) => value + 1) }} className="shrink-0 rounded-lg border border-rose-200 px-3 py-1.5 font-semibold">重新加载</button>
         </div>
       )}
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-        {COVERS.map((spec, index) => {
-          const ref = index === 0 ? wechatRef : index === 1 ? universalRef : socialRef
-          return (
-            <div key={spec.key} className={`overflow-hidden rounded-xl border border-[#EAE4DC] bg-white ${index === 2 ? 'md:col-span-2 md:mx-auto md:w-full md:max-w-[340px]' : ''}`}>
-              <div className="relative bg-[#FAF8F5]">
-                <canvas ref={ref} width={spec.width} height={spec.height} className={`block h-auto w-full ${phase === 'ready' ? '' : 'invisible'}`} aria-label={`${spec.label}封面预览`} />
-                {phase !== 'ready' && <p role="status" className="absolute inset-0 flex items-center justify-center p-4 text-center text-xs text-[#71717A]">{phase === 'error' ? '封面暂不可用' : '正在加载封面…'}</p>}
-              </div>
-              <div className="flex items-center justify-between gap-3 p-3">
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-[#27272A]">{spec.label}</p>
-                  <p className="mt-1 text-[11px] text-[#71717A]">{spec.ratio} · {spec.width}×{spec.height}</p>
-                </div>
-                <button type="button" onClick={() => download(spec, ref.current)} disabled={phase !== 'ready'} className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-[#EAE4DC] px-3 py-2 text-[11px] font-semibold text-[#52525B] transition hover:bg-[#FAF8F5] disabled:opacity-40">
-                  <PrismIcon name="download" /> 下载 PNG
-                </button>
-              </div>
-            </div>
-          )
-        })}
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-[1.35fr_1fr] md:items-start">
+        <div className="flex flex-col gap-5">
+          {renderCard(COVERS[0], wechatRef)}
+          {renderCard(COVERS[1], universalRef)}
+        </div>
+        {renderCard(COVERS[2], socialRef)}
       </div>
     </div>
   )
@@ -237,19 +240,35 @@ function DynamicCoverStudio({ title, markdown, onToast }: Pick<CoverStudioProps,
     setAttempt((value) => value + 1)
   }
 
+  const hasPresetCovers = Boolean(getCoverCollection(title))
+
   return <div>
-    <p className="mb-4 text-xs leading-6 text-[#71717A]">根据当前标题和正文设计封面；每次生成一张，正文参考最多取前 16000 字。点击生成会将文字发送至 AIArtMirror。生成结果只保存到当前浏览器。</p>
-    <div className="flex flex-wrap items-center gap-3">
-      <label className="text-sm">封面比例 <select aria-label="封面比例" value={ratio} disabled={phase === 'generating'} onChange={(e) => setRatio(e.target.value as typeof ratio)} className="rounded-lg border p-2">{COVERS.map((item) => <option key={item.key} value={item.key}>{item.label} · {item.ratio}</option>)}</select></label>
-      <label className="text-sm">体验口令 <input type="password" autoComplete="off" aria-label="体验口令" value={code} onChange={(e) => setCode(e.target.value)} className="w-36 rounded-lg border p-2" /></label>
-      <button type="button" className="primary-action" disabled={phase !== 'ready' || !code.trim() || !markdown.trim()} onClick={() => void generate()}>{phase === 'generating' ? '正在生成…' : blob ? '重新生成此比例' : '生成此比例'}</button>
-      {phase === 'generating' && <button type="button" className="text-action" onClick={() => { setPhase('ready'); setMessage('生成仍在后台继续，完成后会缓存。再次点击只会继续等待同一任务，不会重复下单。') }}>停止等待</button>}
+    {hasPresetCovers && (
+      <div className="mb-6">
+        <StaticCoverStudio title={title} onToast={onToast} />
+      </div>
+    )}
+    <div className={hasPresetCovers ? 'border-t border-[#EAE4DC] pt-5' : ''}>
+      <p className="mb-4 text-xs leading-6 text-[#71717A]">
+        {hasPresetCovers
+          ? '如需按改写后的正文重新生成，可填写体验口令触发实时 AI 封面（可选，单次约 30–40 秒，结果保存在当前浏览器）；未填口令可直接下载上方预制示例封面。'
+          : '根据当前标题和正文设计封面（可选）；每次生成一张，正文参考最多取前 16000 字。未填口令时可跳过封面，直接前往官方编辑器发布或自备封面。'}
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="text-sm">封面比例 <select aria-label="封面比例" value={ratio} disabled={phase === 'generating'} onChange={(e) => setRatio(e.target.value as typeof ratio)} className="rounded-lg border p-2">{COVERS.map((item) => <option key={item.key} value={item.key}>{item.label} · {item.ratio}</option>)}</select></label>
+        <label className="text-sm">体验口令 <input type="password" autoComplete="off" aria-label="体验口令" placeholder="可选，由运营方提供" value={code} onChange={(e) => setCode(e.target.value)} className="w-40 rounded-lg border p-2" /></label>
+        <button type="button" className="primary-action" disabled={phase !== 'ready' || !code.trim() || !markdown.trim()} onClick={() => void generate()}>{phase === 'generating' ? '正在生成…' : blob ? '重新生成此比例' : '生成此比例'}</button>
+        {phase === 'generating' && <button type="button" className="text-action" onClick={() => { setPhase('ready'); setMessage('生成仍在后台继续，完成后会缓存。再次点击只会继续等待同一任务，不会重复下单。') }}>停止等待</button>}
+      </div>
+      {(message || phase === 'loading') && (
+        <p role="status" className="my-3 text-xs leading-6 text-[#71717A]">
+          {message || '正在读取本机封面…'}
+        </p>
+      )}
+      {url && <div className="my-4 max-w-2xl overflow-hidden rounded-xl border border-[#EAE4DC]">
+        <img src={url} alt={`${title} · ${spec.label}生成封面`} className="h-auto w-full" />
+        <div className="flex items-center justify-between p-3 text-xs"><span>{spec.width}×{spec.height} · 居中裁切，请核对文字</span><a className="text-action" href={url} download={`prismpress-${ratio}.png`}>下载 PNG</a></div>
+      </div>}
     </div>
-    <p role="status" className="my-3 text-xs leading-6 text-[#71717A]">{message || (phase === 'loading' ? '正在读取本机封面…' : '口令由运营方提供；每次生成可能计费，失败不会自动重试。')}</p>
-    {url && <div className="my-4 max-w-2xl overflow-hidden rounded-xl border border-[#EAE4DC]">
-      <img src={url} alt={`${title} · ${spec.label}生成封面`} className="h-auto w-full" />
-      <div className="flex items-center justify-between p-3 text-xs"><span>{spec.width}×{spec.height} · 居中裁切，请核对文字</span><a className="text-action" href={url} download={`prismpress-${ratio}.png`}>下载 PNG</a></div>
-    </div>}
-    {getCoverCollection(title) && <details className="mt-6"><summary className="cursor-pointer text-sm">查看预制示例封面（非实时生成）</summary><div className="mt-4"><StaticCoverStudio title={title} onToast={onToast} /></div></details>}
   </div>
 }

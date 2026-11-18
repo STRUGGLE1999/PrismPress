@@ -107,7 +107,7 @@ export function classifyImage(url: string): { health: ImageHealth; reason: strin
 
   const publicCdn = matchDomain(host, PUBLIC_DOMAINS)
   if (publicCdn) {
-    return { health: 'green', reason: `${publicCdn.label}，公开直链，七端通杀`, host }
+    return { health: 'green', reason: `${publicCdn.label}，公开直链，多数平台可直接引用`, host }
   }
 
   return {

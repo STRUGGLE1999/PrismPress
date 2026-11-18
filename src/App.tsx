@@ -135,6 +135,9 @@ function App() {
     [analysis.images, sanitize.output, sources],
   )
   const passport = useMemo(() => generatePassport(markdown), [markdown])
+  const totalFixes = useMemo(() => sanitize.counts.reduce((sum, item) => sum + item.count, 0), [sanitize.counts])
+  const warnImages = imageReport.red + imageReport.yellow
+  const checkSummary = `${totalFixes > 0 ? `已自动整理 ${totalFixes} 处格式` : '格式检查已通过'}${warnImages > 0 ? ` · ${warnImages} 张图片需关注` : imageReport.total > 0 ? ' · 图片状态正常' : ''}`
   const localImageList = useMemo(() => Object.values(localImages), [localImages])
   const copyKeys = useMemo(() => Object.fromEntries(PLATFORMS.map((item) => [item.id, `${item.id === 'wechat' ? themeId : DEFAULT_RICH_THEME_ID}\n${contentKey}`])) as Record<PlatformId, string>, [contentKey, themeId])
 
@@ -479,7 +482,7 @@ function App() {
             <div><h2>切换平台，查看成品</h2><p>原稿修改后自动更新预览，发布前请在官方编辑器确认效果。</p></div>
             <nav className="platform-options" aria-label="选择发布平台">{PLATFORMS.map((item) => <button type="button" key={item.id} aria-pressed={item.id === platformId} onClick={() => { setPlatformId(item.id); setCopyState('idle') }}><PlatformIcon id={item.id} />{item.shortName}</button>)}</nav>
           </section>
-          <div className="preview-caption"><span>{analysis.title || '未命名文章'} · {imageReport.total} 张原稿图片</span><button type="button" className="text-action" aria-expanded={editorOpen} onClick={() => setEditorOpen((open) => !open)}>{editorOpen ? '收起原稿' : '修改原稿 / 选择示例'}</button></div>
+          <div className="preview-caption"><span>{analysis.title || '未命名文章'} · {imageReport.total} 张原稿图片 · {checkSummary}</span><button type="button" className="text-action" aria-expanded={editorOpen} onClick={() => setEditorOpen((open) => !open)}>{editorOpen ? '收起原稿' : '修改原稿 / 选择示例'}</button></div>
           {imageReport.red > 0 && <div className="missing-images" role="status">
             <div><strong>{imageReport.red} 张图片尚未就绪</strong><p>Markdown 只保存图片路径。选择文章的配图文件夹后，平台会自动匹配，不需要逐张替换。</p>
               <ul>{imageReport.findings.filter((item) => item.health === 'red').map((item, index) => <li key={`${item.url}-${index}`}>{item.url} — {item.reason}</li>)}</ul>
@@ -504,7 +507,7 @@ function App() {
             {([{ id: 'passport', label: '标题与摘要' }, { id: 'covers', label: '封面（可选）' }, { id: 'relay', label: '打开发布页' }] as const).map((item) => <button type="button" key={item.id} aria-current={stageTab === item.id ? 'page' : undefined} onClick={() => setStageTab(item.id)}>{item.label}</button>)}
           </nav>
           <RightPassport markdown={markdown} passport={passport} platform={platform} platforms={PLATFORMS} theme={theme} copyKeys={copyKeys} synced={synced} relaying={relaying}
-            section={stageTab} onCopyText={handleCopyText} onRelay={handleRelay} onSelectPlatform={(id) => { setPlatformId(id); setCopyState('idle'); setWorkflowStep(2) }} onToast={showToast} />
+            section={stageTab} checkSummary={checkSummary} onCopyText={handleCopyText} onRelay={handleRelay} onSelectPlatform={(id) => { setPlatformId(id); setCopyState('idle'); setWorkflowStep(2) }} onToast={showToast} />
           <div className="step-actions inside"><button type="button" className="text-action" onClick={() => setWorkflowStep(2)}>← 返回平台预览</button>{stageTab !== 'relay' && <button type="button" className="secondary-action" onClick={() => setStageTab('relay')}>继续：打开发布页 →</button>}</div>
         </section>}
         <footer className="product-footer"><span>原稿本机保存 · 无需绑定平台账号</span><details><summary>使用与隐私说明</summary><p>原稿、配图和复制记录保存在当前浏览器，清理浏览器数据会删除它们。请下载原稿备份。远程图片会请求对应图床；只有主动点击上传时才请求本机 PicList。仅主动点击生成封面时，标题与正文参考会经服务端发送至 AIArtMirror；封面保存在当前浏览器。PrismPress 不替你登录或发布，粘贴后的排版与图片仍需在官方编辑器确认。</p></details></footer>
