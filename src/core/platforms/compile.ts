@@ -85,7 +85,7 @@ export async function compileArticle(
   let slides = undefined
 
   if (platform.format === 'deck') {
-    const deck = await buildSlideDeck(document.root, platform, sanitize.lineMap)
+    const deck = await buildSlideDeck(document.root, platform, sanitize.lineMap, options.passport)
     body = deck.caption
     slides = deck.slides
     externalLinks = collectExternalLinks(document.links)

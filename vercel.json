@@ -1,6 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "api/cover.mjs": { "maxDuration": 180 }
+    "api/cover.mjs": { "maxDuration": 180 },
+    "api/passport.mjs": { "maxDuration": 90 }
   }
 }

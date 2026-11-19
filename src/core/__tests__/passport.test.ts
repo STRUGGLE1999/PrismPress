@@ -39,4 +39,11 @@ describe('免 API Key 发布护照', () => {
     expect(passport.summaries.juejin.length).toBeGreaterThanOrEqual(50)
     expect(passport.summaries.juejin.length).toBeLessThanOrEqual(100)
   })
+
+  it('过滤以冒号结尾的半截引导句与泛化动词标签', () => {
+    const passport = generatePassport(SAMPLE_ARTICLES[0].markdown)
+    expect(passport.summaries.wechat.text).not.toContain('：。')
+    expect(passport.summaries.wechat.text).not.toContain(':.')
+    expect(passport.tags).not.toContain('能够')
+  })
 })

@@ -149,6 +149,14 @@ const STOPWORDS = new Set(
     '由于',
     '不同',
     '无法',
+    '能够',
+    '等级',
+    '帮助',
+    '工作',
+    '提供',
+    '包含',
+    '支持',
+    '具有',
     '之后',
     '之前',
     '现在',
@@ -487,7 +495,7 @@ function splitSentences(text: string): string[] {
     .flatMap((line) => line.split(/(?<=[。！？!?；;])/))
     .map((sentence) => {
       const cleaned = sentence.replace(/\s+/g, ' ').trim()
-      if (!cleaned) return ''
+      if (!cleaned || /[：:]$/.test(cleaned)) return ''
       return /[。！？!?；;…]$/.test(cleaned) ? cleaned : `${cleaned}。`
     })
     .filter((sentence) => charLength(sentence) >= 12 && charLength(sentence) <= 220)

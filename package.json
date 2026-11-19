@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "fflate": "^0.8.3",
     "mathjax-full": "^3.2.1",
     "mdast-util-to-string": "^4.0.0",
     "react": "^19.3.1",

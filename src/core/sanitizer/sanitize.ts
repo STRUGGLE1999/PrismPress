@@ -55,15 +55,17 @@ function tightenInlineMath(chunk: string, onFix: (before: string, after: string)
 /** 计算每一行是否处于 fenced code block 内（围栏行本身也视为内部） */
 function markFences(rawLines: string[]): boolean[] {
   let fenceChar: string | null = null
+  let fenceLength = 0
   return rawLines.map((line) => {
     const match = line.match(FENCE_OPEN)
     if (match) {
       const char = match[1][0]
       if (fenceChar === null) {
         fenceChar = char
+        fenceLength = match[1].length
         return true
       }
-      if (fenceChar === char) {
+      if (fenceChar === char && match[1].length >= fenceLength && !line.slice(match[0].length).trim()) {
         fenceChar = null
         return true
       }

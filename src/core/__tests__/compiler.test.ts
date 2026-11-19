@@ -286,3 +286,29 @@ describe('本地配图匹配', () => {
     expect(result).toContain('![未知](图.png)')
   })
 })
+
+it('公式链接过滤危险协议，保留正常公式和HTTPS链接', async () => {
+  for (const url of ['javascript:alert(1)', 'JaVaScRiPt:alert(1)', 'data:text/html,test', 'java\tscript:alert(1)', 'java\nscript:alert(1)', '&#106;avascript:alert(1)', 'java&#x73;cript:alert(1)']) {
+    const result = await compileArticle(`$\\href{${url}}{x}$`, 'zhihu')
+    expect(result.body).not.toMatch(/<a\b[^>]*\bhref=/i)
+  }
+  const normal = await compileArticle('$x^2 + y^2$\n\n$\\href{https://example.com}{x}$', 'zhihu')
+  expect(normal.body).toContain('<svg')
+  expect(normal.body).toContain('href="https://example.com"')
+})
+
+it('四反引号中的三反引号示例与连续空行原样保留', async () => {
+  const code = '````md\n```js\nconst a = 1\n```\n##不应改写\n\n\n\n结尾\n````'
+  const result = await compileArticle('# 示例\n\n' + code, 'csdn')
+  expect(result.sanitize.output).toContain('##不应改写')
+  expect(result.body).toContain(code)
+})
+
+it('图集实际正文与首图使用已提炼的标题和标签', async () => {
+  const result = await compileArticle('# 原标题\n\n## 背景\n\n具体内容。', 'xiaohongshu', {
+    passport: { title: '新主标题', shortTitle20: '新短标题', tags: ['新话题'] },
+  })
+  expect(result.body).toContain('新短标题')
+  expect(result.body).toContain('#新话题')
+  expect(result.slides?.[0].title).toBe('新主标题')
+})

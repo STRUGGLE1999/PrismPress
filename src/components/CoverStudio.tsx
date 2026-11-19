@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { generatePassport } from '@/core'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import type { RichTheme } from '@/core'
 import { PrismIcon } from './PrismIcon'
 import { pendingCover, startCover } from './coverJobs'
@@ -35,7 +36,7 @@ export function getCoverCollection(title: string): CoverCollection | null {
 }
 
 export function CoverStudio({ title, markdown, onToast }: CoverStudioProps) {
-  return <DynamicCoverStudio key={markdown} title={title} markdown={markdown} onToast={onToast} />
+  return <DynamicCoverStudio key={title + markdown} title={title} markdown={markdown} onToast={onToast} />
 }
 
 function StaticCoverStudio({ title, onToast }: Pick<CoverStudioProps, 'title' | 'onToast'>) {
@@ -174,6 +175,15 @@ async function storeCover(key: string, value?: Blob): Promise<Blob | undefined> 
   } finally { db.close() }
 }
 
+function coverIdentity(markdown: string, title: string) {
+  return title === generatePassport(markdown).title ? markdown : JSON.stringify([title, markdown])
+}
+
+export async function loadSavedCovers(markdown: string, title: string) {
+  const identity = coverIdentity(markdown, title)
+  return Promise.all(COVERS.map(async (spec) => ({ name: spec.key, blob: await storeCover(await coverKey(identity, spec.key)) })))
+}
+
 function DynamicCoverStudio({ title, markdown, onToast }: Pick<CoverStudioProps, 'title' | 'markdown' | 'onToast'>) {
   const [ratio, setRatio] = useState<typeof COVERS[number]['key']>('universal')
   const [code, setCode] = useState('')
@@ -182,7 +192,8 @@ function DynamicCoverStudio({ title, markdown, onToast }: Pick<CoverStudioProps,
   const [url, setUrl] = useState('')
   const [message, setMessage] = useState('')
   const [attempt, setAttempt] = useState(0)
-  const jobKey = `${ratio}\0${markdown}`
+  const identity = useMemo(() => coverIdentity(markdown, title), [markdown, title])
+  const jobKey = `${ratio}\0${identity}`
   const spec = COVERS.find((item) => item.key === ratio)!
 
   useEffect(() => {
@@ -199,13 +210,13 @@ function DynamicCoverStudio({ title, markdown, onToast }: Pick<CoverStudioProps,
         if (current) setMessage(error instanceof Error ? error.message : '生成失败')
       }).finally(() => { if (current) setPhase('ready') })
     } else {
-      coverKey(markdown, ratio).then((key) => storeCover(key)).then((saved) => {
+      coverKey(identity, ratio).then((key) => storeCover(key)).then((saved) => {
         if (current) setBlob(saved)
       }).catch(() => { if (current) setMessage('无法读取本机封面缓存，仍可生成和下载。') })
         .finally(() => { if (current) setPhase('ready') })
     }
     return () => { current = false }
-  }, [markdown, ratio, jobKey, attempt])
+  }, [markdown, identity, ratio, jobKey, attempt])
   useEffect(() => {
     if (!blob) { setUrl(''); return }
     const next = URL.createObjectURL(blob); setUrl(next)
@@ -233,7 +244,7 @@ function DynamicCoverStudio({ title, markdown, onToast }: Pick<CoverStudioProps,
       context.drawImage(image, (spec.width - image.width * scale) / 2, (spec.height - image.height * scale) / 2, image.width * scale, image.height * scale)
       image.close()
       const result = await new Promise<Blob>((resolve, reject) => canvas.toBlob((output) => output ? resolve(output) : reject(new Error('封面导出失败')), 'image/png'))
-      try { await storeCover(await coverKey(markdown, ratio), result); return { blob: result, saved: true } }
+      try { await storeCover(await coverKey(identity, ratio), result); return { blob: result, saved: true } }
       catch { return { blob: result, saved: false } }
     })
     setPhase('generating')

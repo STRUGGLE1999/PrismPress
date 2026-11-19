@@ -11,7 +11,7 @@ import type {
   TableCell,
 } from 'mdast'
 import type { InlineMath, Math as MathNode } from 'mdast-util-math'
-import type { PlatformProfile, SlideCard } from '../../types'
+import type { CompileOptions, PlatformProfile, SlideCard } from '../../types'
 import { renderTexToSvg } from '../../formula/mathjax'
 
 export interface DeckCompileResult {
@@ -61,6 +61,7 @@ export async function buildSlideDeck(
   root: Root,
   platform: PlatformProfile,
   lineMap?: number[],
+  passport?: CompileOptions['passport'],
 ): Promise<DeckCompileResult> {
   const mapLine = (line?: number) => {
     if (!line) return 1
@@ -192,7 +193,8 @@ export async function buildSlideDeck(
     (s) => s.bullets.length > 0 || s.quote || s.tableRows || s.formulaTex || s.highlight,
   )
 
-  const tagPool = extractDeckTags(docTitle, trimmedSections)
+  if (passport) docTitle = passport.title
+  const tagPool = passport?.tags ?? extractDeckTags(docTitle, trimmedSections)
 
   const rawSlides: Array<Omit<SlideCard, 'index' | 'total'>> = []
 
@@ -250,7 +252,7 @@ export async function buildSlideDeck(
     total,
   }))
 
-  const caption = buildSocialCaption(docTitle, docLead, trimmedSections, tagPool, platform.id)
+  const caption = buildSocialCaption(passport?.shortTitle20 ?? docTitle, docLead, trimmedSections, tagPool, platform.id)
 
   return { slides, caption }
 }

@@ -12,6 +12,7 @@ const FENCE_LINE = /^(\s{0,3})(`{3,}|~{3,})(.*)$/
 function fillFenceLanguages(lines: string[]): { lines: string[]; filled: number } {
   let inFence = false
   let fenceChar = ''
+  let fenceLength = 0
   let filled = 0
 
   const next = lines.map((line) => {
@@ -24,6 +25,7 @@ function fillFenceLanguages(lines: string[]): { lines: string[]; filled: number 
     if (!inFence) {
       inFence = true
       fenceChar = char
+      fenceLength = fence.length
       if (info.trim() === '') {
         filled += 1
         return `${indent}${fence}text`
@@ -31,7 +33,7 @@ function fillFenceLanguages(lines: string[]): { lines: string[]; filled: number 
       return line
     }
 
-    if (char === fenceChar && info.trim() === '') {
+    if (char === fenceChar && fence.length >= fenceLength && info.trim() === '') {
       inFence = false
       fenceChar = ''
     }
@@ -57,7 +59,7 @@ function ensureBlockSpacing(lines: string[]): string[] {
     if (fence) {
       appendBlankIfNeeded()
       const char = fence[2][0]
-      const closing = new RegExp(`^\\s{0,3}${char}{3,}\\s*$`)
+      const closing = new RegExp(`^\\s{0,3}${char}{${fence[2].length},}\\s*$`)
       out.push(line)
       index += 1
       while (index < lines.length) {
@@ -119,6 +121,7 @@ function countUnclosedMath(lines: string[]): number[] {
   const result: number[] = []
   let inFence = false
   let fenceChar = ''
+  let fenceLength = 0
 
   lines.forEach((line, index) => {
     const fence = line.match(FENCE_LINE)
@@ -126,7 +129,8 @@ function countUnclosedMath(lines: string[]): number[] {
       if (!inFence) {
         inFence = true
         fenceChar = fence[2][0]
-      } else if (fence[2][0] === fenceChar && fence[3].trim() === '') {
+        fenceLength = fence[2].length
+      } else if (fence[2][0] === fenceChar && fence[2].length >= fenceLength && fence[3].trim() === '') {
         inFence = false
       }
       return
@@ -142,7 +146,20 @@ function countUnclosedMath(lines: string[]): number[] {
 }
 
 function collapseBlankLines(text: string): string {
-  return text.replace(/\n{3,}/g, '\n\n').replace(/\n*$/, '\n')
+  const lines = text.split('\n')
+  const output: string[] = []
+  let open: string | undefined
+  for (const line of lines) {
+    const fence = line.match(FENCE_LINE)
+    const inside = Boolean(open)
+    if (fence) {
+      if (!open) open = fence[2]
+      else if (fence[2][0] === open[0] && fence[2].length >= open.length && !fence[3].trim()) open = undefined
+    }
+    if (!inside && !open && !line.trim() && output.at(-1) === '') continue
+    output.push(line)
+  }
+  return output.join('\n').replace(/\n*$/, '\n')
 }
 
 /**

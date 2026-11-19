@@ -31,7 +31,7 @@ async function loadRuntime(): Promise<MathJaxRuntime | null> {
   if (!runtimePromise) {
     runtimePromise = (async () => {
       try {
-        const [{ mathjax }, { TeX }, { SVG }, { liteAdaptor }, { RegisterHTMLHandler }, { AllPackages }] =
+        const [{ mathjax }, { TeX }, { SVG }, { liteAdaptor }, { RegisterHTMLHandler }, { AllPackages }, { SafeHandler }] =
           await Promise.all([
             import('mathjax-full/js/mathjax.js'),
             import('mathjax-full/js/input/tex.js'),
@@ -39,10 +39,11 @@ async function loadRuntime(): Promise<MathJaxRuntime | null> {
             import('mathjax-full/js/adaptors/liteAdaptor.js'),
             import('mathjax-full/js/handlers/html.js'),
             import('mathjax-full/js/input/tex/AllPackages.js'),
+            import('mathjax-full/js/ui/safe/SafeHandler.js'),
           ])
 
         const adaptor = liteAdaptor()
-        RegisterHTMLHandler(adaptor)
+        SafeHandler(RegisterHTMLHandler(adaptor))
         const tex = new TeX({ packages: AllPackages })
         const svg = new SVG({ fontCache: 'local' })
         const doc = mathjax.document('', { InputJax: tex, OutputJax: svg })
@@ -99,7 +100,13 @@ export async function renderTexToSvg(tex: string, display: boolean): Promise<For
       return failed
     }
 
-    let svg = tagSvgIds(match[0])
+    // MathJax's safe extension does not normalize embedded controls or HTML entities.
+    // Only serialized fragment references and explicit HTTP(S) URLs may reach the DOM.
+    const safeSvg = match[0].replace(/\b((?:xlink:)?href)="([^"]*)"/gi, (_attribute, name: string, value: string) => {
+      const normalized = value.replace(/[\u0000-\u0020\u007f]/g, '')
+      return /^(?:#|https?:\/\/)/i.test(normalized) ? `${name}="${normalized}"` : ''
+    })
+    let svg = tagSvgIds(safeSvg)
     if (display) {
       svg = svg.replace(/style="[^"]*"/, 'style="display:block;margin:12px auto;max-width:100%;height:auto;"')
     } else {

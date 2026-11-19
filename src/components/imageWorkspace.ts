@@ -64,3 +64,8 @@ export function imageChangeKey(text: string): string {
   }
   return `${text.length}:${first >>> 0}:${second >>> 0}`
 }
+
+/** A new document owns its assets; adding pictures to the current document merges them. */
+export function importedImageAssets(current: Record<string, LocalImageAsset>, additions: Record<string, LocalImageAsset>, newDocument: boolean) {
+  return newDocument ? additions : { ...current, ...additions }
+}

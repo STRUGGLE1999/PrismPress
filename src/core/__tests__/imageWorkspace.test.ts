@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { detachInlineImages, imageSources, imageChangeKey, referencedImageNames } from '../../components/imageWorkspace'
+import { detachInlineImages, imageSources, imageChangeKey, referencedImageNames, importedImageAssets } from '../../components/imageWorkspace'
 import { compileArticle } from '../platforms/compile'
 
 describe('原稿与本地图片分离', () => {
@@ -58,4 +58,10 @@ it('编译后图片数据不进入净化原稿，行号和预览图片仍正确'
     expect(result.images.red).toBe(0)
     expect(platform === 'wechat' ? result.body : result.previewHtml).toContain(data)
   }
+})
+
+ it('新稿不沿用上一稿同路径素材，补配图才合并', () => {
+  const old = detachInlineImages('![图](data:image/png;base64,b2xk)').assets
+  expect(imageSources('![图](images/导入图片-1.png)', importedImageAssets(old, {}, true))).toEqual({})
+  expect(importedImageAssets(old, {}, false)).toEqual(old)
 })

@@ -203,6 +203,7 @@ export interface CompileResult {
 }
 
 export interface CompileOptions {
+  passport?: { title: string; shortTitle20: string; tags: string[] }
   imageSources?: Record<string, string>
   /** 注入 TOC（仅 CSDN 默认开启，可覆盖） */
   injectToc?: boolean

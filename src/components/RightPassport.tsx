@@ -1,9 +1,12 @@
 import type { MetadataPassport, PlatformId, PlatformProfile, RichTheme } from '@/core'
+import { extractPassport, passportState } from './passportState'
 import { CoverStudio } from './CoverStudio'
 import { PlatformIcon, PrismIcon } from './PrismIcon'
 
 interface RightPassportProps {
   markdown: string
+  aiLoading: boolean
+  hasAi: boolean
   passport: MetadataPassport
   platform: PlatformProfile
   platforms: PlatformProfile[]
@@ -19,9 +22,15 @@ interface RightPassportProps {
   onToast: (message: string, tone?: 'success' | 'error' | 'info') => void
 }
 
-export function RightPassport({ markdown, passport, platform, platforms, theme, copyKeys, synced, relaying,
+export function RightPassport({ markdown, aiLoading, hasAi, passport, platform, platforms, theme, copyKeys, synced, relaying,
   section, checkSummary, onCopyText, onRelay, onSelectPlatform, onToast,
 }: RightPassportProps) {
+  const handleAiExtract = async () => {
+    try {
+      await extractPassport(markdown, passport.title)
+      onToast(passportState(markdown).saved ? '已完成 AI 提炼并保存到本机' : '已完成 AI 提炼，但本机保存失败，请及时复制', passportState(markdown).saved ? 'success' : 'info')
+    } catch (error) { onToast(error instanceof Error ? error.message : 'AI 提炼失败，请稍后重试', 'error') }
+  }
   if (section === 'covers') {
     return <section className="publication-panel">
       <h2>为这篇文章准备封面</h2>
@@ -55,23 +64,33 @@ export function RightPassport({ markdown, passport, platform, platforms, theme, 
 
   const isDeck = platform.format === 'deck'
   const summary = platform.id === 'juejin' ? passport.summaries.juejin.text
-    : platform.id === 'wechat' ? passport.summaries.wechat.text
-    : platform.id === 'csdn' ? passport.summaries.csdn.text
-    : Array.from(passport.summaries.wechat.text).slice(0, 100).join('')
+    : platform.id === 'csdn' ? passport.summaries.csdn.text : platform.id === 'wechat' ? passport.summaries.wechat.text : Array.from(passport.summaries.wechat.text).slice(0, platform.summary.max).join('')
   const fields = [
     { label: isDeck ? '短标题（20 字内）' : '文章标题', value: isDeck ? passport.shortTitle20 : passport.title },
     ...(!isDeck ? [{ label: '参考摘要', value: summary }] : []),
     { label: isDeck || platform.id === 'wechat' ? '话题' : '标签', value: isDeck || platform.id === 'wechat' ? passport.hashtags : passport.tagsCsv },
     ...(platform.id === 'bilibili' ? [{ label: '评论区总结（可选）', value: passport.bilibiliSummary }] : []),
   ]
+  const categoryLabel = platform.id === 'juejin'
+    ? passport.category.juejin
+    : passport.category.generic
   return <section className="publication-panel">
-    <h2>{platform.shortName}的发布资料</h2>
-    <p className="section-description">根据正文整理，按需要复制到平台表单。请在发布前核对内容与平台要求。</p>
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h2>{platform.shortName}的发布资料</h2>
+        <p className="section-description">
+          {hasAi ? '已使用大模型智能提炼（切换平台共享结果）；发布前请核对。' : '默认按正文实时提取；也可点击右侧按钮使用大模型智能提炼。'}
+        </p>
+      </div>
+      <button type="button" className="secondary-action shrink-0" disabled={aiLoading || !markdown.trim()} onClick={() => void handleAiExtract()}>
+        <PrismIcon name="idea" /> {aiLoading ? 'AI 提炼中…' : hasAi ? '重新 AI 提炼' : 'AI 智能提炼'}
+      </button>
+    </div>
     {fields.map((field) => <div className="publication-field" key={field.label}>
       <div className="flex items-center justify-between gap-3"><h3>{field.label}</h3><button type="button" className="text-action" onClick={() => onCopyText(field.value, field.label)}><PrismIcon name="copy" size={20} /> 复制{field.label}</button></div>
       <p>{field.value || '暂无内容，请先补充文章正文。'}</p>
       {field.label === '参考摘要' && <small>{Array.from(field.value).length} 字 · {platform.summary.note}</small>}
     </div>)}
-    <p className="mt-5 text-xs text-[#71717A]">分类建议：{platform.id === 'juejin' ? passport.category.juejin : passport.category.generic} · {platform.categoryRule}</p>
+    <p className="mt-5 text-xs text-[#71717A]">分类建议：{categoryLabel} · {platform.categoryRule}</p>
   </section>
 }

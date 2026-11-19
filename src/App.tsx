@@ -1,5 +1,8 @@
+import { workspaceBackup } from './components/workspaceBackup'
+import { loadSavedCovers } from './components/CoverStudio'
+import { applyAiPassport, passportState, subscribePassport } from './components/passportState'
 import { PlatformIcon, PrismIcon } from '@/components/PrismIcon'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useSyncExternalStore, useRef, useState } from 'react'
 import {
   DEFAULT_RICH_THEME_ID,
   PLATFORMS,
@@ -24,7 +27,7 @@ import { RightPassport } from '@/components/RightPassport'
 
 type PublishTab = 'passport' | 'covers' | 'relay'
 import { PicListGuideModal } from '@/components/PicListGuideModal'
-import { detachInlineImages, imageSources, imageChangeKey, referencedImageNames } from '@/components/imageWorkspace'
+import { detachInlineImages, imageSources, imageChangeKey, referencedImageNames, importedImageAssets } from '@/components/imageWorkspace'
 import { resolveImageReport } from '@/core/images/radar'
 import { loadImageAssets, saveImageAssets } from '@/components/imageStorage'
 import type { LocalImageAsset } from '@/components/localImage'
@@ -103,6 +106,7 @@ function App() {
   const [importProgress, setImportProgress] = useState<{ done: number; total: number; skipped: number } | null>(null)
   const folderInput = useRef<HTMLInputElement>(null)
   const [stageTab, setStageTab] = useState<PublishTab>('passport')
+  const [backingUp, setBackingUp] = useState(false)
   const [saveState, setSaveState] = useState<'saving' | 'saved' | 'error'>('saving')
   const [result, setResult] = useState<CompileResult | null>(null)
   const [compiledContentKey, setCompiledContentKey] = useState('')
@@ -127,14 +131,16 @@ function App() {
   const theme = getRichTheme(effectiveThemeId)
 
   const sources = useMemo(() => imageSources(markdown, localImages), [markdown, localImages])
-  const contentKey = useMemo(() => imageChangeKey(markdown + Object.values(sources).map(imageChangeKey).join('|')), [markdown, sources])
+  const aiState = useSyncExternalStore(subscribePassport, () => passportState(markdown))
+  const passport = useMemo(() => applyAiPassport(generatePassport(markdown), aiState.value), [markdown, aiState.value])
+  const contentKey = useMemo(() => imageChangeKey(markdown + Object.values(sources).map(imageChangeKey).join('|') + JSON.stringify(aiState.value ?? null)), [markdown, sources, aiState.value])
   const sanitize = useMemo(() => sanitizeMarkdown(markdown), [markdown])
   const analysis = useMemo(() => analyzeMarkdown(sanitize.output), [sanitize.output])
   const imageReport = useMemo(
     () => resolveImageReport(scanImages(analysis.images, sanitize.output), sources),
     [analysis.images, sanitize.output, sources],
   )
-  const passport = useMemo(() => generatePassport(markdown), [markdown])
+
   const totalFixes = useMemo(() => sanitize.counts.reduce((sum, item) => sum + item.count, 0), [sanitize.counts])
   const warnImages = imageReport.red + imageReport.yellow
   const checkSummary = `${totalFixes > 0 ? `已自动整理 ${totalFixes} 处格式` : '格式检查已通过'}${warnImages > 0 ? ` · ${warnImages} 张图片需关注` : imageReport.total > 0 ? ' · 图片状态正常' : ''}`
@@ -187,7 +193,7 @@ function App() {
     setCompileError(null)
 
     const timer = window.setTimeout(() => {
-      compileArticle(markdown, platformId, { themeId: effectiveThemeId, imageSources: sources })
+      compileArticle(markdown, platformId, { themeId: effectiveThemeId, imageSources: sources, passport: aiState.value ? passport : undefined })
         .then((compiled) => {
           if (!alive) return
           setResult(compiled)
@@ -206,7 +212,7 @@ function App() {
       alive = false
       window.clearTimeout(timer)
     }
-  }, [markdown, sources, platformId, effectiveThemeId])
+  }, [markdown, sources, platformId, effectiveThemeId, contentKey, passport])
 
   const displayResult =
     result &&
@@ -282,9 +288,8 @@ function App() {
     }
     if (token !== importToken.current) return
     setImportProgress(null)
-    if (Object.keys(additions).length > 0) {
-      setLocalImages((previous) => ({ ...previous, ...additions }))
-    }
+    const nextAssets = importedImageAssets(localImages, additions, loadedMarkdown)
+    setLocalImages(nextAssets)
     if (next !== markdown) {
       setMarkdown(next)
       setCopyState('idle')
@@ -295,7 +300,7 @@ function App() {
       setEditorOpen(false)
     }
 
-    const readyImages = imageSources(next, { ...localImages, ...additions })
+    const readyImages = imageSources(next, nextAssets)
     const missing = resolveImageReport(scanImages(analyzeMarkdown(next).images, next), readyImages).findings.filter((item) => item.health === 'red')
     const processed = Object.keys(additions).length
     if (missing.length > 0) {
@@ -314,7 +319,8 @@ function App() {
   }
 
   const handlePicListUpload = async () => {
-    const assets = Object.values(localImages)
+    const referenced = referencedImageNames(markdown, Object.keys(localImages))
+    const assets = Object.entries(localImages).filter(([name]) => referenced.has(name)).map(([, asset]) => asset)
     if (assets.length === 0) {
       showToast('请先把本地图片拖进左栏，再上传到 PicList', 'info')
       return
@@ -352,7 +358,8 @@ function App() {
   }
 
   const handleInlineConvert = () => {
-    const assets = Object.values(localImages)
+    const referenced = referencedImageNames(markdown, Object.keys(localImages))
+    const assets = Object.entries(localImages).filter(([name]) => referenced.has(name)).map(([, asset]) => asset)
     if (assets.length === 0) {
       showToast('请先把本地图片拖进左栏', 'info')
       return
@@ -423,7 +430,7 @@ function App() {
         compiledTheme === targetThemeId && compiledContentKey === contentKey
           ? result
           : null
-      const compiled = reusable ?? (await compileArticle(markdown, id, { themeId: targetThemeId, imageSources: sources }))
+      const compiled = reusable ?? (await compileArticle(markdown, id, { themeId: targetThemeId, imageSources: sources, passport: aiState.value ? passport : undefined }))
       await copyCompiledArticle(compiled)
 
       if (popup && !popup.closed) {
@@ -442,6 +449,23 @@ function App() {
     }
   }
 
+  const downloadBackup = async () => {
+    if (backingUp) return
+    setBackingUp(true)
+    try {
+      let covers: Awaited<ReturnType<typeof loadSavedCovers>> = []
+      let coversAvailable = true
+      try { covers = await loadSavedCovers(markdown, passport.title) } catch { coversAvailable = false }
+      const archive = await workspaceBackup(markdown, localImages, covers)
+      const url = URL.createObjectURL(archive)
+      const anchor = document.createElement('a')
+      anchor.href = url; anchor.download = 'PrismPress-文章备份.zip'; anchor.click()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      showToast(coversAvailable ? '已导出原稿、本地配图与已缓存封面；远程图片仍为链接' : '已导出原稿和本地配图；封面缓存读取失败，未包含封面', coversAvailable ? 'success' : 'info')
+    } catch { showToast('完整备份失败，请下载原稿并保留原始配图', 'error') }
+    finally { setBackingUp(false) }
+  }
+
   const downloadSource = () => {
     const url = URL.createObjectURL(new Blob([markdown], { type: 'text/markdown;charset=utf-8' }))
     const anchor = document.createElement('a')
@@ -455,7 +479,7 @@ function App() {
     <div className="app-shell">
       <header className="product-header">
         <div className="flex items-center gap-2"><PrismMark /><div><p className="product-wordmark">PrismPress <span>棱镜发布台</span></p><p className="product-caption">Markdown 多平台发布助手</p></div></div>
-        <button type="button" className="text-action" onClick={downloadSource} disabled={!markdown.trim()}>下载原稿</button>
+        <div className="flex flex-wrap items-center gap-3"><button type="button" className="text-action" onClick={downloadSource} disabled={!markdown.trim()}>下载原稿</button><button type="button" className="text-action" onClick={() => void downloadBackup()} disabled={backingUp || !markdown.trim()}>{backingUp ? '正在打包…' : '完整备份'}</button></div>
       </header>
       <main className="workflow-main">
         <div className="workflow-intro">
@@ -506,11 +530,11 @@ function App() {
           <nav className="publication-tabs" aria-label="发布准备选项">
             {([{ id: 'passport', label: '标题与摘要' }, { id: 'covers', label: '封面（可选）' }, { id: 'relay', label: '打开发布页' }] as const).map((item) => <button type="button" key={item.id} aria-current={stageTab === item.id ? 'page' : undefined} onClick={() => setStageTab(item.id)}>{item.label}</button>)}
           </nav>
-          <RightPassport markdown={markdown} passport={passport} platform={platform} platforms={PLATFORMS} theme={theme} copyKeys={copyKeys} synced={synced} relaying={relaying}
+          <RightPassport aiLoading={aiState.loading} hasAi={Boolean(aiState.value)} markdown={markdown} passport={passport} platform={platform} platforms={PLATFORMS} theme={theme} copyKeys={copyKeys} synced={synced} relaying={relaying}
             section={stageTab} checkSummary={checkSummary} onCopyText={handleCopyText} onRelay={handleRelay} onSelectPlatform={(id) => { setPlatformId(id); setCopyState('idle'); setWorkflowStep(2) }} onToast={showToast} />
           <div className="step-actions inside"><button type="button" className="text-action" onClick={() => setWorkflowStep(2)}>← 返回平台预览</button>{stageTab !== 'relay' && <button type="button" className="secondary-action" onClick={() => setStageTab('relay')}>继续：打开发布页 →</button>}</div>
         </section>}
-        <footer className="product-footer"><span>原稿本机保存 · 无需绑定平台账号</span><details><summary>使用与隐私说明</summary><p>原稿、配图和复制记录保存在当前浏览器，清理浏览器数据会删除它们。请下载原稿备份。远程图片会请求对应图床；只有主动点击上传时才请求本机 PicList。仅主动点击生成封面时，标题与正文参考会经服务端发送至 AIArtMirror；封面保存在当前浏览器。PrismPress 不替你登录或发布，粘贴后的排版与图片仍需在官方编辑器确认。</p></details></footer>
+        <footer className="product-footer"><span>原稿本机保存 · 无需绑定平台账号</span><details><summary>使用与隐私说明</summary><p>原稿、配图和复制记录保存在当前浏览器，清理浏览器数据会删除它们。请下载原稿备份。远程图片会请求对应图床；只有主动点击上传时才请求本机 PicList。仅主动点击生成封面时，标题与正文参考会经服务端发送至 AIArtMirror；封面保存在当前浏览器。主动点击 AI 智能提炼时，标题与正文参考会经服务端发送至 aicodemirror.ai，用于生成发布资料，结果缓存在当前浏览器。PrismPress 不替你登录或发布，粘贴后的排版与图片仍需在官方编辑器确认。</p></details></footer>
       </main>
 
       <PicListGuideModal open={guideOpen} onClose={() => setGuideOpen(false)} onToast={showToast} />
