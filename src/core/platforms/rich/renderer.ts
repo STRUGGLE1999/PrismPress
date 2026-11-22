@@ -310,6 +310,12 @@ function renderLink(node: Link, ctx: RenderContext): string {
   const content = inlineChildren(node.children, ctx) || escapeHtml(node.url)
   const url = node.url.trim()
 
+  if (platform.id === 'douyin') {
+    return /^https?:\/\//i.test(url) && content !== escapeHtml(url)
+      ? `${content}（${escapeHtml(url)}）`
+      : content
+  }
+
   if (platform.footnoteLinks && /^https?:\/\//i.test(url)) {
     let index = ctx.linkIndex.get(url)
     if (!index) {
@@ -323,8 +329,8 @@ function renderLink(node: Link, ctx: RenderContext): string {
   return `<a href="${escapeAttr(safeUrl(url))}" style="color:${theme.link};text-decoration:none;border-bottom:1px solid ${theme.border};">${content}</a>`
 }
 
-function renderImage(node: Image): string {
-  return `<img src="${escapeAttr(safeUrl(node.url))}" alt="${escapeAttr(node.alt ?? '')}" style="max-width:100%;height:auto;display:block;margin:18px auto;border-radius:6px;" />`
+function renderImage(node: Image, platform: PlatformProfile): string {
+  return `<img src="${escapeAttr(safeUrl(node.url))}" alt="${escapeAttr(node.alt ?? '')}" style="max-width:100%;height:auto;display:block;margin:18px auto;border-radius:6px;${platform.id === 'douyin' ? 'min-width:100px;min-height:100px;object-fit:contain;background:#FFFFFF;' : ''}" />`
 }
 
 function renderTableCell(
@@ -356,6 +362,9 @@ function renderTableRow(
 
 function renderTable(node: Table, ctx: RenderContext): string {
   const { theme, platform } = ctx
+  if (platform.format === 'html' && (platform.id === 'xiaohongshu' || platform.id === 'douyin')) {
+    return node.children.map((row, index) => `<p style="margin:12px 0;line-height:1.8;${index === 0 ? 'font-weight:600;' : ''}">${row.children.map(cell => inlineChildren(cell.children, ctx)).join(' ｜ ')}</p>`).join('\n')
+  }
   const columnCount = Math.max(1, ...node.children.map((row) => row.children.length))
   const minWidth = platform.tableShield ? Math.max(480, columnCount * 140) : null
   const rows = node.children
@@ -456,7 +465,7 @@ function renderNode(node: RootContent, ctx: RenderContext): string {
     case 'link':
       return renderLink(node as Link, ctx)
     case 'image':
-      return withSourceLine(renderImage(node as Image), node, ctx)
+      return withSourceLine(renderImage(node as Image, ctx.platform), node, ctx)
     case 'table':
       return withSourceLine(renderTable(node as Table, ctx), node, ctx)
     case 'tableRow':

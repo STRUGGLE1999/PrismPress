@@ -12,19 +12,12 @@ describe('paid cover endpoint', () => {
     await handler({ method: 'POST', headers: {}, body: {} }, res)
     expect(res.statusCode).toBe(503)
   })
-  it('rejects anonymous requests before contacting provider', async () => {
-    vi.stubEnv('AIARTMIRROR_API_KEY', 'private-key'); vi.stubEnv('COVER_ACCESS_CODE', 'invite')
-    const fetch = vi.fn(); vi.stubGlobal('fetch', fetch)
-    const res = response()
-    await handler({ method: 'POST', headers: {}, body: {} }, res)
-    expect(res.statusCode).toBe(401); expect(fetch).not.toHaveBeenCalled()
-  })
-  it('uses article content and returns only image bytes without provider account fields', async () => {
-    vi.stubEnv('AIARTMIRROR_API_KEY', 'private-key'); vi.stubEnv('COVER_ACCESS_CODE', 'invite')
+  it('accepts generation without an experience code and returns only image bytes', async () => {
+    vi.stubEnv('AIARTMIRROR_API_KEY', 'private-key')
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [{ b64_json: 'iVBORw0KGgo=' }], account: 'secret' })))
     vi.stubGlobal('fetch', fetch)
     const res = response()
-    await handler({ method: 'POST', headers: { authorization: 'Bearer invite' }, body: { title: '标题', article: '正文里的独特内容', ratio: 'wechat' } }, res)
+    await handler({ method: 'POST', headers: {}, body: { title: '标题', article: '正文里的独特内容', ratio: 'wechat' } }, res)
     expect(res.statusCode).toBe(200)
     const sent = JSON.parse(fetch.mock.calls[0][1].body)
     expect(sent.prompt).toContain('正文里的独特内容'); expect(sent.n).toBe(1)
@@ -34,19 +27,19 @@ describe('paid cover endpoint', () => {
 })
 
 it('rejects an unsupported ratio without spending', async () => {
-  vi.stubEnv('AIARTMIRROR_API_KEY', 'private-key'); vi.stubEnv('COVER_ACCESS_CODE', 'invite')
+  vi.stubEnv('AIARTMIRROR_API_KEY', 'private-key')
   const fetch = vi.fn(); vi.stubGlobal('fetch', fetch)
   const res = response()
-  await handler({ method: 'POST', headers: { authorization: 'Bearer invite' }, body: { title: '标题', article: '正文', ratio: '__proto__' } }, res)
+  await handler({ method: 'POST', headers: {}, body: { title: '标题', article: '正文', ratio: '__proto__' } }, res)
   expect(res.statusCode).toBe(400); expect(fetch).not.toHaveBeenCalled()
 })
 
 it('does not retry provider failures or expose upstream credentials', async () => {
-  vi.stubEnv('AIARTMIRROR_API_KEY', 'private-key'); vi.stubEnv('COVER_ACCESS_CODE', 'invite')
+  vi.stubEnv('AIARTMIRROR_API_KEY', 'private-key')
   const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { message: 'private-key account internals' } }), { status: 503 }))
   vi.stubGlobal('fetch', fetch)
   const res = response()
-  await handler({ method: 'POST', headers: { authorization: 'Bearer invite' }, body: { title: '标题', article: '正文', ratio: 'universal' } }, res)
+  await handler({ method: 'POST', headers: {}, body: { title: '标题', article: '正文', ratio: 'universal' } }, res)
   expect(res.statusCode).toBe(502); expect(fetch).toHaveBeenCalledTimes(1)
-  expect(res.body.error).toContain('模型或线路不可用'); expect(JSON.stringify(res.body)).not.toContain('private-key')
+  expect(res.body.error).toContain('模型线路暂时不可用'); expect(JSON.stringify(res.body)).not.toContain('private-key')
 })

@@ -72,17 +72,17 @@ export function classifyImage(url: string): { health: ImageHealth; reason: strin
   }
 
   if (/^data:image\//i.test(trimmed)) {
-    return { health: 'green', reason: '内联 Data URI，随正文一起复制，不依赖图床', host: null }
+    return { health: 'green', reason: '已嵌入正文，可随正文复制', host: null }
   }
 
   if (/^blob:/i.test(trimmed)) {
-    return { health: 'red', reason: '浏览器临时 Blob 地址，关闭页面即失效，平台无法访问', host: null }
+    return { health: 'red', reason: '临时图片地址，可导入原图后使用', host: null }
   }
 
   if (isLocalPath(trimmed)) {
     return {
       health: 'red',
-      reason: '本地相对路径，目标平台可能无法访问，建议先转成公开 HTTPS 链接',
+      reason: '图片尚未导入，可选择对应配图文件夹',
       host: null,
     }
   }
@@ -107,7 +107,7 @@ export function classifyImage(url: string): { health: ImageHealth; reason: strin
 
   const publicCdn = matchDomain(host, PUBLIC_DOMAINS)
   if (publicCdn) {
-    return { health: 'green', reason: `${publicCdn.label}，公开直链，多数平台可直接引用`, host }
+    return { health: 'green', reason: `${publicCdn.label}，公开图片链接`, host }
   }
 
   return {

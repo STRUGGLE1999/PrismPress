@@ -1,14 +1,11 @@
-import { analyzeMarkdown } from '../markdown/document'
+import { analyzeMarkdown, parseMarkdown } from '../markdown/document'
+import { toString } from 'mdast-util-to-string'
+import { visit } from 'unist-util-visit'
 
-export type SummaryKey = 'juejin' | 'wechat' | 'csdn'
-
-export interface SummaryRule {
-  key: SummaryKey
-  label: string
-  min: number
-  max: number
-  note: string
-}
+import { SUMMARY_RULES } from '../../../shared/summary-rules.mjs'
+import type { SummaryKey, SummaryRule } from '../../../shared/summary-rules.mjs'
+export { SUMMARY_RULES }
+export type { SummaryKey, SummaryRule }
 
 export interface PassportSummary extends SummaryRule {
   text: string
@@ -35,30 +32,6 @@ export interface MetadataPassport {
   category: PassportCategory
   readingMinutes: number
   generatedAt: number
-}
-
-export const SUMMARY_RULES: Record<SummaryKey, SummaryRule> = {
-  juejin: {
-    key: 'juejin',
-    label: '掘金',
-    min: 50,
-    max: 100,
-    note: '强制 50~100 字，少于 50 字无法发布',
-  },
-  wechat: {
-    key: 'wechat',
-    label: '微信公众号',
-    min: 0,
-    max: 120,
-    note: '不超过 120 字，建议主动填写',
-  },
-  csdn: {
-    key: 'csdn',
-    label: 'CSDN',
-    min: 0,
-    max: 256,
-    note: '不超过 256 字，需纯文本',
-  },
 }
 
 const STOPWORDS = new Set(
@@ -359,33 +332,23 @@ function normalizeToken(raw: string): string {
 }
 
 export function stripMarkdown(markdown: string): string {
-  return markdown
-    .replace(/```[\s\S]*?```/g, ' ')
-    .replace(/~~~[\s\S]*?~~~/g, ' ')
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-    .replace(/<img\b[^>]*>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\$\$[\s\S]*?\$\$/g, ' ')
-    .replace(/(?<!\\)\$[^$\n]+\$/g, ' ')
-    // 整行标题与表格不参与摘要造句，避免把“改造前 改造后 提升”拼进导语
-    .replace(/^[ \t]*#{1,6}[^\n]*$/gm, ' ')
-    .replace(/^[ \t]*\|.*\|[ \t]*$/gm, ' ')
-    .replace(/^[ \t]*[^|\n]*(?:\|[^|\n]*){2,}$/gm, ' ')
-    .replace(/^[ \t]*(参考资料|参考文献|参考)[：:].*$/gm, ' ')
-    .replace(/^\s*>\s?/gm, '')
-    .replace(/^\s*[-*+]\s+/gm, '')
-    .replace(/^\s*\d+[.)]\s+/gm, '')
-    .replace(/\[[ xX]\]/g, ' ')
-    .replace(/`{1,3}([^`]*)`{1,3}/g, '$1')
-    .replace(/\*\*|__|~~|\*/g, '')
-    .replace(/\\\|/g, ' ')
-    .replace(/\|/g, ' ')
-    .replace(/^[\s|:-]+$/gm, ' ')
-    .replace(/\[\d+\]/g, ' ')
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
+  const root = parseMarkdown(markdown)
+  // Exclude non-prose nodes structurally, including nested/long/unclosed fences.
+  visit(root, (node) => {
+    if ('children' in node) {
+      node.children = node.children.filter((child) =>
+        !['code', 'math', 'inlineMath', 'html', 'image', 'imageReference', 'footnoteReference', 'footnoteDefinition', 'table', 'heading', 'definition'].includes(child.type),
+      ) as typeof node.children
+    }
+  })
+  const paragraphs: string[] = []
+  visit(root, 'paragraph', (node) => {
+    const content = node.children.filter((child) => child.type !== 'text' || child.value.trim())
+    if (content.length && content.every((child) => child.type === 'link' && child.url.startsWith('#'))) return
+    const text = toString(node).replace(/\s+/g, ' ').trim()
+    if (text && !/^(?:目录|contents|table of contents|\[toc\])$/i.test(text) && !/^(?:如果这篇文章|如果你想支持|欢迎.*(?:点赞|关注))/.test(text) && !/^(?:英文原标题|英文标题|原标题|副标题|作者|译者|发布日期|原文链接|来源)\s*[:：]/.test(text)) paragraphs.push(text)
+  })
+  return paragraphs.join('\n')
 }
 
 function tokenize(text: string): string[] {
@@ -498,7 +461,7 @@ function splitSentences(text: string): string[] {
       if (!cleaned || /[：:]$/.test(cleaned)) return ''
       return /[。！？!?；;…]$/.test(cleaned) ? cleaned : `${cleaned}。`
     })
-    .filter((sentence) => charLength(sentence) >= 12 && charLength(sentence) <= 220)
+    .filter((sentence) => charLength(sentence) > 1)
     .filter((sentence) => !/^(参考资料|参考文献|参考|价格测试|本文由|作者|编辑|扫码|关注)/.test(sentence))
     .filter((sentence) => !/\[[ xX]\]/.test(sentence))
     .filter((sentence) => !/^(这张图|那张图|上图|下图|如图|图片来源|图片)/.test(sentence))
@@ -522,7 +485,9 @@ function scoreSentences(sentences: string[], keywords: string[], title: string):
     }
     const length = charLength(sentence)
     let score = (weight / Math.sqrt(Math.max(10, length))) * 12 + titleHits * 0.5
-    if (index < 2) score += 1.6
+    if (index < 2) score += 0.8
+    if (/总结|因此|核心|关键|真正|必须|意味着|不再|我的工作/.test(sentence)) score += 2
+    if (index >= sentences.length * 0.65) score += 0.8
     if (index < 4) score += 0.4
     if (length < 16) score -= 0.6
     if (length > 140) score -= 0.5
@@ -565,23 +530,9 @@ function buildSummary(
     : Math.round(rule.max * 0.85)
 
   const allScored = scoreSentences(sentences, keywords, title)
-  const byIndex = [...allScored].sort((a, b) => a.index - b.index)
   const ranked = [...allScored].sort((a, b) => b.score - a.score)
   const chosen: ScoredSentence[] = []
   let length = 0
-
-  // 先用正文开头的 1~2 句做导语，保证摘要从文章主旨开始，而不是从中间随机摘句
-  for (const sentence of byIndex.slice(0, 2)) {
-    if (length + sentence.length <= rule.max) {
-      chosen.push(sentence)
-      length += sentence.length
-    } else if (chosen.length === 0) {
-      const truncated = clampText(sentence.text, rule.max)
-      chosen.push({ ...sentence, text: truncated, length: charLength(truncated) })
-      length = charLength(truncated)
-      break
-    }
-  }
 
   for (const sentence of ranked) {
     if (length >= target) break
@@ -594,7 +545,7 @@ function buildSummary(
 
   let text = ''
   if (chosen.length === 0) {
-    text = title || sentences[0] || '本文记录了完整的实践过程与思考。'
+    text = ranked[0]?.text || sentences[0] || title
   } else {
     chosen.sort((a, b) => a.index - b.index)
     text = chosen
@@ -604,22 +555,6 @@ function buildSummary(
       .trim()
   }
   text = clampText(text, rule.max)
-
-  const keywordText = keywords.slice(0, 3).join('、') || title
-  const fillers = [
-    `本文围绕${keywordText}展开，梳理关键过程、实践细节与可复用经验，供读者参考。`,
-    '文中同时记录了踩坑过程与修正思路，适合收藏后结合原文阅读。',
-    '希望这份复盘能为同类场景提供一份可直接借鉴的参考。',
-  ]
-
-  let fillerIndex = 0
-  while (charLength(text) < rule.min && charLength(text) < rule.max) {
-    const need = Math.min(rule.min - charLength(text), rule.max - charLength(text))
-    const filler = sliceChars(fillers[fillerIndex % fillers.length], need)
-    if (!filler) break
-    text += filler
-    fillerIndex += 1
-  }
 
   return clampText(text, rule.max)
 }
@@ -655,10 +590,7 @@ function detectCategory(keywords: string[]): PassportCategory {
   return best ?? { juejin: '代码人生', generic: '综合创作' }
 }
 
-/**
- * 免 API Key 的确定性发布护照生成器。
- * 基于标题、关键词权重、句子位置与平台字数硬约束，0.1 秒内给出可发布文案。
- */
+/** 本机规则提取发布资料；短文可能不足平台下限，compliant 如实返回。 */
 export function generatePassport(markdown: string): MetadataPassport {
   const analysis = analyzeMarkdown(markdown)
   const plain = stripMarkdown(markdown)

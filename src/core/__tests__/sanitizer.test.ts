@@ -2,6 +2,16 @@ import { describe, expect, it } from 'vitest'
 import { sanitizeMarkdown } from '../sanitizer/sanitize'
 
 describe('Auto-Sanitizer', () => {
+  it('repairs Chinese quoted bold without modifying code or escaped markers', () => {
+    const source = '永远是**“重点”**。\n\n`**“代码”**`\n\n```md\n**“代码块”**\n```\n\n    **“缩进代码”**\n\n\\**“原样”**'
+    const result = sanitizeMarkdown(source)
+    expect(result.output).toContain('永远是“**重点**”。')
+    expect(result.output).toContain('`**“代码”**`')
+    expect(result.output).toContain('```md\n**“代码块”**\n```')
+    expect(result.output).toContain('    **“缩进代码”**')
+    expect(result.output).toContain('\\**“原样”**')
+    expect(result.counts.find(item => item.rule === 'quoted-bold')?.count).toBe(1)
+  })
   it('修复标题缺空格，并跳过代码块', () => {
     const input = ['##一、背景', '', '```md', '##代码块内保持原样', '```', '', '###三级标题'].join('\n')
     const report = sanitizeMarkdown(input)

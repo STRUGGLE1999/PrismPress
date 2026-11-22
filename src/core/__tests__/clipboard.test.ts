@@ -59,10 +59,10 @@ describe('clipboard fallback', () => {
     expect(browser.attached.size).toBe(0)
   })
 
-  it('falls back to literal plain text when rich copying is refused', async () => {
+  it('does not silently discard images and formatting when rich copying is refused', async () => {
     const browser = fallbackBrowser([false, true])
-    await copyCompiledArticle(article('html', '<p>正文</p>', '正文 <原样>'))
-    expect(browser.selectedText).toEqual(['正文 <原样>'])
+    await expect(copyCompiledArticle(article('html', '<p>正文</p>', '正文 <原样>'))).rejects.toThrow('富文本复制失败')
+    expect(browser.selectedText).toEqual([])
     expect(browser.attached.size).toBe(0)
   })
 

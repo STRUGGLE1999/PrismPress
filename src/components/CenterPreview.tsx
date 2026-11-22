@@ -12,8 +12,11 @@ import type {
 } from '@/core'
 import { RICH_THEMES } from '@/core'
 import { SocialDeckSimulator } from './SocialDeckSimulator'
+import type { DeckDraft } from './deckDraft'
 
 interface CenterPreviewProps {
+  deckKey: string
+  onDeckDraftChange: (draft: DeckDraft) => void
   platformId: PlatformId
   platform: PlatformProfile
   themeId: ThemePreset
@@ -29,11 +32,12 @@ interface CenterPreviewProps {
 }
 
 function formatClipboard(mime: ClipboardMime, format: string): string {
-  if (format === 'deck') return '章节摘要图集 · 3:4'
+  if (format === 'deck') return '文章图集 · 3:4'
   return mime === 'text/html' ? '适配富文本编辑器' : '适配 Markdown 编辑器'
 }
 
 export function CenterPreview({
+  deckKey, onDeckDraftChange,
   platformId,
   platform,
   themeId,
@@ -50,10 +54,7 @@ export function CenterPreview({
   const [viewport, setViewport] = useState<'desktop' | 'mobile'>('desktop')
   const [markdownTab, setMarkdownTab] = useState<'rendered' | 'raw'>('rendered')
 
-  const previewHtml =
-    result?.format === 'html'
-      ? result.body.replace(/^(\s*<section[^>]*>)?\s*<h[12][^>]*>[\s\S]*?<\/h[12]>\s*/i, '$1')
-      : ''
+  const previewHtml = result?.format === 'html' ? result.body : ''
 
   const handlePreviewClick = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement
@@ -118,7 +119,7 @@ export function CenterPreview({
                     viewport === 'mobile' ? 'bg-[#27272A] text-white' : 'text-[#71717A]'
                   }`}
                 >
-                  <PrismIcon name="phone" /> 375px 手机
+                  <PrismIcon name="phone" /> 手机
                 </button>
               </div>
             </div>
@@ -151,20 +152,20 @@ export function CenterPreview({
           )}
 
           {result && result.diagnostics.length > 0 && <details className="preview-diagnostics">
-            <summary>查看适配说明 · {result.diagnostics.length} 项{result.images.red + result.images.yellow > 0 ? '，图片地址需关注' : ''}</summary>
+            <summary>排版调整 · {result.diagnostics.length} 项{result.images.red + result.images.yellow > 0 ? '，含待检查图片' : ''}</summary>
             <ul>{result.diagnostics.map((diag, index) => <li key={`${diag.code}-${index}`}>{diag.message}</li>)}</ul>
           </details>}
 
       </>
 
       {/* 主内容视口 */}
-      <div className="relative flex-1 overflow-hidden">
+      <div className="relative min-h-0 flex-1 overflow-hidden">
         {compiling && <div className="prism-loading absolute inset-x-0 top-0 z-20 h-0.5" />}
 
         {compileError ? (
           <div className="flex h-full items-center justify-center p-6">
             <div className="max-w-sm rounded-2xl border border-rose-200 bg-rose-50 p-5 text-center">
-              <p className="text-xs font-bold text-rose-700">编译链路中断</p>
+              <p className="text-xs font-bold text-rose-700">暂时无法生成预览</p>
               <p className="mt-1 text-[11px] leading-5 text-rose-600">{compileError}</p>
             </div>
           </div>
@@ -181,14 +182,21 @@ export function CenterPreview({
         ) : result.format === 'deck' && result.slides ? (
           /* 1. 小红书 / 抖音 3:4 视觉图集真机模拟器 */
           <SocialDeckSimulator
-            key={platformId}
+            key={`${platformId}:${deckKey}`}
+            onDraftChange={onDeckDraftChange}
             platform={platform}
-            theme={theme}
             slides={result.slides}
             caption={result.body}
             onLocate={onLocate}
             onToast={onToast}
           />
+        ) : (platformId === 'xiaohongshu' || platformId === 'douyin') && result.format === 'html' ? (
+          <div className="h-full overflow-y-auto bg-[#F7F5FA] p-5 sm:p-8">
+            <article className="mx-auto max-w-[720px] rounded-2xl bg-white p-6 sm:p-10">
+              <h1 className="mb-8 text-2xl font-bold leading-relaxed">{passport.title}</h1>
+              <div className="rich-preview" onClick={handlePreviewClick} dangerouslySetInnerHTML={{ __html: previewHtml || result.body }} />
+            </article>
+          </div>
         ) : platformId === 'zhihu' ? (
           /* 2. 知乎专栏蓝白真机外壳 */
           <div className="h-full overflow-y-auto bg-[#F6F6F6] text-[#121212]">
@@ -222,7 +230,7 @@ export function CenterPreview({
                   <div>
                     <p className="text-xs font-bold text-slate-800">Lavenda</p>
                     <p className="text-[11px] text-slate-400">
-                      AI 产品与解决方案 · H3/H4 已自动降维，标题已转换
+                      文章预览
                     </p>
                   </div>
                 </div>
@@ -259,7 +267,7 @@ export function CenterPreview({
                   bilibili 专栏
                 </span>
                 <span className="text-xs font-medium text-slate-500">
-                  科技 / 野生技术协会 · H3/H4 已转 ◆ 章节高亮
+                  专栏文章预览
                 </span>
               </div>
               <span className="rounded-full bg-pink-50 px-2.5 py-0.5 text-[11px] font-semibold text-[#FB7299]">
@@ -278,7 +286,7 @@ export function CenterPreview({
                   </div>
                   <div>
                     <p className="font-bold text-[#FB7299]">Lavenda</p>
-                    <p className="text-[10.5px] text-slate-400">阅读 {passport.readingMinutes} 分钟 · 专栏原声排版</p>
+                    <p className="text-[10.5px] text-slate-400">阅读 {passport.readingMinutes} 分钟 · 专栏文章</p>
                   </div>
                 </div>
                 <span className="rounded-full bg-[#FB7299] px-3 py-1 text-[11px] font-semibold text-white">
@@ -289,14 +297,14 @@ export function CenterPreview({
               <div className="mt-5 rounded-xl border border-pink-200 bg-pink-50/70 p-3.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-[#FB7299]">
-                    📌 评论区置顶 · 课代表省流总结
+                    内容总结
                   </span>
                   <button
                     type="button"
                     onClick={() => onCopyText(passport.bilibiliSummary, 'B站省流总结')}
                     className="rounded-full bg-[#FB7299] px-2.5 py-0.5 text-[10px] font-semibold text-white"
                   >
-                    复制省流
+                    复制总结
                   </button>
                 </div>
                 <p className="mt-1.5 text-xs leading-relaxed text-slate-700">
@@ -392,8 +400,8 @@ export function CenterPreview({
                 </span>
                 <span className="text-[11px] text-slate-600">
                   {platformId === 'juejin'
-                    ? `分类：${passport.category.juejin} · 摘要硬卡点 ${passport.summaries.juejin.length}/100 字 ✅`
-                    : '已自动注入 @[TOC](文章目录) · 原创专栏排版'}
+                    ? `分类：${passport.category.juejin} · 摘要 ${passport.summaries.juejin.length}/100 字 ✅`
+                    : '文章预览'}
                 </span>
               </div>
               <span className="font-mono text-[10.5px] font-semibold" style={{ color: platform.accent }}>
@@ -410,7 +418,7 @@ export function CenterPreview({
                       key={idx}
                       onClick={() => onLocate(mappedLine)}
                       className="group flex cursor-pointer items-start gap-3 rounded px-2 py-0.5 transition hover:bg-[#FFF2F2]"
-                      title={`点击定位到左侧源码第 ${mappedLine} 行`}
+                      title={`点击定位到原稿第 ${mappedLine} 行`}
                     >
                       <span className="w-8 shrink-0 select-none text-right text-[10px] text-[#A1A1AA] group-hover:text-[#FF5A5F]">
                         {idx + 1}
@@ -464,7 +472,7 @@ export function CenterPreview({
                       }}
                     >
                       <strong className="mr-1.5" style={{ color: platform.accent }}>
-                        [{platform.name}专属卡点摘要]
+                        [{platform.name}摘要]
                       </strong>
                       {platformId === 'juejin'
                         ? passport.summaries.juejin.text
@@ -474,9 +482,9 @@ export function CenterPreview({
 
                   {platformId === 'csdn' && (
                     <div className="border-b border-orange-100 bg-orange-50/50 px-6 py-3 text-xs text-orange-900">
-                      <span className="font-bold text-[#FC5531]">📑 @[TOC](文章目录) 已自动注入顶部</span>
+                      <span className="font-bold text-[#FC5531]">文章目录</span>
                       <span className="ml-2 text-[11px] text-slate-500">
-                        粘贴至 CSDN Markdown 编辑器后将自动生成侧边悬浮目录树
+                        随正文一起复制
                       </span>
                     </div>
                   )}
@@ -490,7 +498,7 @@ export function CenterPreview({
         )}
       </div>
 
-      <div className="border-t border-[#EAE4DC] px-5 py-3 text-xs text-[#71717A]">排版效果仅供预览，请在官方编辑器粘贴后检查。点击正文可返回原稿对应位置。</div>
+      <div className="border-t border-[#EAE4DC] px-5 py-3 text-xs text-[#71717A]">{platform.format === 'deck' ? '按顺序上传图片，粘贴发布文案。' : '点击段落可修改对应原稿。'}</div>
     </div>
   )
 }

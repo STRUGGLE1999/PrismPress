@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { compileArticle } from '../platforms/compile'
+import { compileArticle as compileRaw } from '../platforms/compile'
+const compileArticle: typeof compileRaw = (source, platform, options = {}) => compileRaw(source, platform, { publicationMode: 'deck', ...options })
 import { scanImages, classifyImage } from '../images/radar'
 import { replaceImageReference } from '../images/local'
 import { RICH_THEMES } from '../platforms/rich/theme'
@@ -42,6 +43,11 @@ describe('三色图片体检雷达', () => {
 })
 
 describe('富文本阵营：知乎 / B站标题降维', () => {
+  it('renders Chinese quoted bold phrases without literal Markdown markers', async () => {
+    const result = await compileArticle('在我职业生涯的大部分时间里，最艰难的决定永远是**“什么时候该停下来止损”**。', 'zhihu')
+    expect(result.body).not.toContain('**')
+    expect(result.body).toMatch(/“<strong[^>]*>什么时候该停下来止损<\/strong>”/)
+  })
   it('H3/H4 编译为 ▎ 与 ◆ 高亮块，正文不出现 ### 符号', async () => {
     const result = await compileArticle(
       '# 标题\n\n## 一级小节\n\n正文\n\n### 三级小节\n\n#### 四级小节',
@@ -99,7 +105,7 @@ describe('富文本阵营：微信公众号', () => {
 
 describe('Markdown 阵营', () => {
   it('CSDN 顶部注入 TOC 并为空代码块补 text', async () => {
-    const result = await compileArticle('# 标题\n\n##章节\n\n```\nplain\n```', 'csdn')
+    const result = await compileArticle('# 标题\n\n##章节\n\n```\nplain\n```', 'csdn', { injectToc: true })
     expect(result.format).toBe('markdown')
     expect(result.body).toContain('@[TOC](文章目录)')
     expect(result.body).toContain('```text')
@@ -166,7 +172,7 @@ describe('公式边界与源码行映射', () => {
   it('富文本块级元素带可回查的源码行号', async () => {
     const markdown = '# 标题\n\n段落内容\n\n### 三级标题\n\n```ts\nconst a = 1\n```'
     const result = await compileArticle(markdown, 'wechat')
-    expect(result.body).toContain('data-source-line="1"')
+    expect(result.body).not.toContain('data-source-line="1"') // 标题由预览及目标平台的独立标题栏显示
     expect(result.body).toContain('data-source-line="3"')
     expect(result.body).toContain('data-source-line="5"')
     expect(result.body).toContain('data-source-line="7"')
@@ -201,23 +207,24 @@ describe('视觉图集阵营：小红书 / 抖音 3:4 滑动知识图集', () =>
       '- 子块负责高精度向量召回',
     ].join('\n')
 
-    const result = await compileArticle(markdown, 'xiaohongshu')
+    const result = await compileArticle(markdown, 'xiaohongshu', { deckMode: 'summary' })
     expect(result.format).toBe('deck')
     expect(result.slides).toBeDefined()
-    expect(result.slides!.length).toBeGreaterThanOrEqual(4)
-    expect(result.slides![0].kind).toBe('cover')
-    expect(result.slides![result.slides!.length - 1].kind).toBe('outro')
-    expect(result.body).toContain('【20字内小红书标题】')
+    expect(result.slides!.length).toBeGreaterThanOrEqual(2)
+    expect(result.slides!.length).toBeLessThanOrEqual(8)
+    expect(result.slides![0].kind).toBe('section')
+    expect(result.slides![result.slides!.length - 1].kind).toBe('section')
+    expect(result.body).not.toMatch(/【20字内|非全文|核心图集 · 共/)
     expect(result.body).toContain('#')
-    expect(result.diagnostics.some((d) => d.code === 'DECK_GENERATED')).toBe(true)
+    expect(result.diagnostics.some((d) => d.code === 'DECK_GENERATED')).toBe(false)
   })
 
   it('抖音图文生成图集与中性章节摘要文案', async () => {
-    const result = await compileArticle('# 标题\n\n## 一、核心方案\n\n内容段落说明。', 'douyin')
+    const result = await compileArticle('# 标题\n\n## 一、核心方案\n\n内容段落说明。', 'douyin', { deckMode: 'summary' })
     expect(result.format).toBe('deck')
     expect(result.slides).toBeDefined()
-    expect(result.body).toContain('【20字内抖音标题】')
-    expect(result.body).toContain('章节摘要')
+    expect(result.body).toContain('核心方案')
+    expect(result.body).not.toMatch(/核心图集|20字内|非全文/)
   })
 })
 
@@ -226,7 +233,7 @@ describe('章节摘要图集的内容边界', () => {
     const markdown = '# 八节文章\n\n' + Array.from({ length: 8 }, (_, index) =>
       `## 第${index + 1}节\n\n这是第${index + 1}节的原文内容。`,
     ).join('\n\n')
-    const result = await compileArticle(markdown, 'xiaohongshu')
+    const result = await compileArticle(markdown, 'xiaohongshu', { deckMode: 'full' })
     const sections = result.slides!.filter((slide) => slide.kind === 'section')
     expect(sections).toHaveLength(8)
     expect(sections[7].title).toBe('第8节')
@@ -236,17 +243,17 @@ describe('章节摘要图集的内容边界', () => {
   it('配套文案不编造作者经历，也不添加预设人设', async () => {
     const markdown = '# 文档评估\n\n## 核心方法\n\n- 使用固定样例核对回答。'
     const results = await Promise.all(['xiaohongshu', 'douyin'].map((id) =>
-      compileArticle(markdown, id as 'xiaohongshu' | 'douyin'),
+      compileArticle(markdown, id as 'xiaohongshu' | 'douyin', { deckMode: 'summary' }),
     ))
     for (const result of results) {
       expect(result.body).not.toMatch(/花了整整一周|姐妹们|家人们|搞钱必看|提升前 3 张图划阅率/)
-      expect(result.body).toContain('章节摘要')
+      expect(result.body).not.toMatch(/核心图集|20字内|非全文/)
       expect(result.body).toContain('使用固定样例核对回答')
     }
   })
 
   it('同一章节保留用于预览和导出的表格与公式', async () => {
-    const result = await compileArticle('# 数学笔记\n\n## 计算示例\n\n| 输入 | 输出 |\n| --- | --- |\n| 2 | 4 |\n\n$$x^2$$', 'xiaohongshu')
+    const result = await compileArticle('# 数学笔记\n\n## 计算示例\n\n| 输入 | 输出 |\n| --- | --- |\n| 2 | 4 |\n\n$$x^2$$', 'xiaohongshu', { deckMode: 'summary' })
     const section = result.slides!.find((slide) => slide.kind === 'section')!
     expect(section.tableRows).toEqual([['输入', '输出'], ['2', '4']])
     expect(section.formulaSvg).toContain('<svg')
@@ -311,4 +318,33 @@ it('图集实际正文与首图使用已提炼的标题和标签', async () => {
   expect(result.body).toContain('新短标题')
   expect(result.body).toContain('#新话题')
   expect(result.slides?.[0].title).toBe('新主标题')
+})
+
+it('keeps a real opening H2 in the copied rich body', async () => {
+  const result = await compileArticle('## 第一节\n\n正文', 'zhihu')
+  expect(result.body).toContain('第一节')
+  expect(result.body).toContain('data-source-line="1"')
+})
+
+it('renders bold next to Chinese quote and bracket boundaries', async () => {
+ const result = await compileArticle('这是**“由你自己决定”的习惯**，也是**工程判断力（Judgment）**活下来。', 'zhihu')
+ expect(result.body).not.toContain('**')
+ expect(result.body).toContain('<strong')
+})
+
+it('copies Markdown body without a duplicate title or an unpreviewed generated TOC', async () => {
+ for (const id of ['juejin', 'csdn'] as const) {
+  const result = await compileArticle('# 文章标题\n\n## 章节\n\n正文', id)
+  expect(result.body).not.toContain('# 文章标题')
+  expect(result.body).not.toContain('@[TOC]')
+  expect(result.body).toContain('## 章节')
+  expect(result.previewHtml).toContain('章节')
+ }
+})
+
+it('keeps Douyin links as visible text instead of unsupported pasted anchors', async () => {
+ const result = await compileArticle('# 标题\n\n[来源](https://example.com) 与 [章节](#section)', 'douyin', { publicationMode: 'article' })
+ expect(result.body).not.toContain('<a ')
+ expect(result.body).toContain('来源（https://example.com）')
+ expect(result.body).toContain('章节')
 })

@@ -1,3 +1,4 @@
+import { toString } from 'mdast-util-to-string'
 import { rewriteImageUrls } from '../images/local'
 import { visit } from 'unist-util-visit'
 import { resolveImageReport } from '../images/radar'
@@ -11,7 +12,7 @@ import type {
 import { sanitizeMarkdown } from '../sanitizer/sanitize'
 import { analyzeMarkdown } from '../markdown/document'
 import { scanImages } from '../images/radar'
-import { getPlatform, resolveHeadingDemotion } from './registry'
+import { getPublicationPlatform, resolveHeadingDemotion } from './registry'
 import { renderRichDocument } from './rich/renderer'
 import { getRichTheme } from './rich/theme'
 import { transformMarkdown } from './markdown/transform'
@@ -40,13 +41,26 @@ export async function compileArticle(
   platformId: PlatformId,
   options: CompileOptions = {},
 ): Promise<CompileResult> {
-  const platform = getPlatform(platformId)
+  const platform = getPublicationPlatform(platformId, options.publicationMode)
+  const isSocialArticle = platform.format === 'html' && (platformId === 'xiaohongshu' || platformId === 'douyin')
   const sanitize = sanitizeMarkdown(source)
   const document = analyzeMarkdown(sanitize.output)
   const images = resolveImageReport(scanImages(document.images, sanitize.output), options.imageSources ?? {})
+  if (isSocialArticle) {
+    const definitions = new Map(document.root.children.filter(node => node.type === 'definition').map(node => [node.identifier, node]))
+    visit(document.root, (node, index, parent) => {
+      if ((node.type !== 'imageReference' && node.type !== 'linkReference') || index === undefined || !parent) return
+      const definition = definitions.get(node.identifier)
+      if (!definition) return
+      parent.children[index] = node.type === 'imageReference'
+        ? { type: 'image', url: definition.url, title: definition.title, alt: node.alt, position: node.position }
+        : { type: 'link', url: definition.url, title: definition.title, children: node.children, position: node.position }
+    })
+  }
   // Parse only the short source. Attach picture bytes to parsed nodes afterwards.
   visit(document.root, (node) => {
     if (node.type === 'image') node.url = options.imageSources?.[node.url] ?? node.url
+    if (node.type === 'definition') node.url = options.imageSources?.[node.url] ?? node.url
     if (node.type === 'html') node.value = node.value.replace(/(<img\b[^>]*\bsrc\s*=\s*["'])([^"']+)(["'])/gi,
       (whole, prefix: string, source: string, suffix: string) => {
         const value = options.imageSources?.[source]
@@ -60,22 +74,22 @@ export async function compileArticle(
     diagnostics.push({
       code: 'SANITIZER_APPLIED',
       severity: 'info',
-      message: `语法净水器已自动修复 ${fixCount} 处跨端隐患。`,
+      message: `已整理 ${fixCount} 处格式。`,
     })
   }
 
-  if (images.red > 0) {
+  if (images.red > 0 && (platform.format !== 'deck' || options.deckMode === 'full')) {
     diagnostics.push({
       code: 'IMAGE_LOCAL_PATH',
       severity: 'error',
-      message: `检测到 ${images.red} 张本地或失效图片，目标平台可能无法访问，请先检查地址或转成公开 HTTPS 链接。`,
+      message: `有 ${images.red} 张图片需要检查，可导入对应配图。`,
     })
   }
-  if (images.yellow > 0) {
+  if (images.yellow > 0 && (platform.format !== 'deck' || options.deckMode === 'full')) {
     diagnostics.push({
       code: 'IMAGE_HOTLINK_RISK',
       severity: 'warning',
-      message: `检测到 ${images.yellow} 张平台私有图床图片，跨平台复制可能触发 Referer 防盗链 403。`,
+      message: `有 ${images.yellow} 张图片来自其他平台，发布时可能无法显示。`,
     })
   }
 
@@ -85,21 +99,17 @@ export async function compileArticle(
   let slides = undefined
 
   if (platform.format === 'deck') {
-    const deck = await buildSlideDeck(document.root, platform, sanitize.lineMap, options.passport)
+    const deck = await buildSlideDeck(document.root, platform, sanitize.lineMap, options.passport, options.deckMode)
     body = deck.caption
     slides = deck.slides
     externalLinks = collectExternalLinks(document.links)
-    diagnostics.push({
-      code: 'DECK_GENERATED',
-      severity: 'info',
-      message: `已按章节整理为 ${deck.slides.length} 张 3:4 摘要卡片及配套文案；卡片是内容摘录，不包含原文全部细节与配图。`,
-    })
   } else if (platform.format === 'html') {
     const theme = getRichTheme(options.themeId)
     const rendered = await renderRichDocument(document.root, {
       platform,
       theme,
       referenceTitle: options.referenceTitle,
+      stripTopH1: true,
       lineMap: sanitize.lineMap,
     })
     body = rendered.html
@@ -115,7 +125,7 @@ export async function compileArticle(
       diagnostics.push({
         code: 'HEADING_DEMOTED',
         severity: 'info',
-        message: `${platform.name} 仅支持两级标题，已将 ${demoted} 个三级/四级标题降维为带引导符的高亮块，杜绝 ### 外露。`,
+        message: `已调整 ${demoted} 处标题层级。`,
       })
     }
 
@@ -131,7 +141,7 @@ export async function compileArticle(
       diagnostics.push({
         code: 'TABLE_SHIELD_APPLIED',
         severity: 'info',
-        message: `已为 ${document.stats.tables} 个表格注入横向滑动护盾，手机端不再挤成「一字长蛇阵」。`,
+        message: `已调整 ${document.stats.tables} 个表格的显示方式。`,
       })
     }
 
@@ -139,25 +149,31 @@ export async function compileArticle(
       diagnostics.push({
         code: 'FORMULA_FALLBACK',
         severity: 'warning',
-        message: `${rendered.formulaFallbacks} 个公式未能编译为 SVG，已降级为等宽文本，请检查 LaTeX 语法。`,
+        message: `有 ${rendered.formulaFallbacks} 个公式暂以文本显示，可返回原稿修改。`,
       })
     }
   } else {
     const transformed = transformMarkdown(sanitize.output, platform, {
-      injectToc: options.injectToc,
+      injectToc: options.injectToc ?? false,
     })
-    body = options.imageSources ? rewriteImageUrls(transformed.markdown, (source) => options.imageSources?.[source]) : transformed.markdown
+    const markdownBody = document.root.children[0]?.type === 'heading' && document.root.children[0].depth === 1
+      ? transformed.markdown.replace(/^\s*# [^\n]+(?:\n|$)/, '').replace(/^\n+/, '')
+      : transformed.markdown
+    body = options.imageSources ? rewriteImageUrls(markdownBody, (source) => options.imageSources?.[source]) : markdownBody
     previewHtml = (await renderRichDocument(document.root, { platform, theme: getRichTheme('native'), lineMap: sanitize.lineMap, stripTopH1: true })).html
     externalLinks = collectExternalLinks(document.links)
     diagnostics.push(...transformed.diagnostics)
   }
+
+  const articleNodes = document.root.children[0]?.type === 'heading' && document.root.children[0].depth === 1 ? document.root.children.slice(1) : document.root.children
+  const articlePlainText = platform.format === 'html' ? articleNodes.map(node => node.type === 'table' ? node.children.map(row => row.children.map(cell => toString(cell)).join(' ｜ ')).join('\n') : toString(node)).filter(Boolean).join('\n\n') : document.plainText
 
   return {
     platform,
     format: platform.format,
     previewHtml,
     body,
-    plainText: platform.format === 'deck' ? body : document.plainText,
+    plainText: platform.format === 'deck' ? body : articlePlainText,
     slides,
     stats: { ...document.stats, images: images.total },
     diagnostics,

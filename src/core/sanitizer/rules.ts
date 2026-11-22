@@ -14,6 +14,12 @@ export interface SanitizeRuleMeta {
  */
 export const SANITIZE_RULES: SanitizeRuleMeta[] = [
   {
+    id: 'quoted-bold',
+    label: '中文标点加粗修复',
+    description: '将中文引号与括号放在加粗边界外，避免相邻中文使星号被当作正文。',
+    example: '**“重点”** → “**重点**”',
+  },
+  {
     id: 'heading-space',
     label: '标题粘连修复',
     description: '为缺失空格的 ATX 标题补空格，避免 Markdown 平台把 ##标题 当成正文。',

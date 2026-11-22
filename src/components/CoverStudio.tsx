@@ -2,7 +2,9 @@ import { generatePassport } from '@/core'
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import type { RichTheme } from '@/core'
 import { PrismIcon } from './PrismIcon'
-import { pendingCover, startCover } from './coverJobs'
+import { pendingCover, startCover, unsavedCover } from './coverJobs'
+import { VisualStylePicker, useVisualStyle } from './VisualStylePicker'
+import { VISUAL_DESIGN_VERSION, VISUAL_STYLES } from '../../shared/visual-design.mjs'
 
 interface CoverStudioProps {
   markdown: string
@@ -133,7 +135,7 @@ function CollectionPreview({ collection, onToast }: {
       </p>
       {phase === 'error' && (
         <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded-xl bg-rose-50 p-3 text-xs text-rose-700">
-          <span>封面加载失败，请检查网络后重试。</span>
+          <span>示例封面暂未载入，请重新加载。</span>
           <button type="button" onClick={() => { setPhase('loading'); setAttempt((value) => value + 1) }} className="shrink-0 rounded-lg border border-rose-200 px-3 py-1.5 font-semibold">重新加载</button>
         </div>
       )}
@@ -175,24 +177,28 @@ async function storeCover(key: string, value?: Blob): Promise<Blob | undefined> 
   } finally { db.close() }
 }
 
-function coverIdentity(markdown: string, title: string) {
-  return title === generatePassport(markdown).title ? markdown : JSON.stringify([title, markdown])
+function coverIdentity(markdown: string, title: string, style?: string) {
+  const article = title === generatePassport(markdown).title ? markdown : JSON.stringify([title, markdown])
+  return style ? JSON.stringify([VISUAL_DESIGN_VERSION, style, article]) : article
 }
 
 export async function loadSavedCovers(markdown: string, title: string) {
-  const identity = coverIdentity(markdown, title)
-  return Promise.all(COVERS.map(async (spec) => ({ name: spec.key, blob: await storeCover(await coverKey(identity, spec.key)) })))
+  const articleIdentity = coverIdentity(markdown, title)
+  return Promise.all([undefined, ...VISUAL_STYLES.map(style => style.id)].flatMap(style => COVERS.map(async spec => ({
+    name: `${style ?? 'previous'}-${spec.key}`, blob: await storeCover(await coverKey(style ? JSON.stringify([VISUAL_DESIGN_VERSION, style, articleIdentity]) : articleIdentity, spec.key)),
+  }))))
 }
 
 function DynamicCoverStudio({ title, markdown, onToast }: Pick<CoverStudioProps, 'title' | 'markdown' | 'onToast'>) {
   const [ratio, setRatio] = useState<typeof COVERS[number]['key']>('universal')
-  const [code, setCode] = useState('')
+  const [style, setStyle] = useVisualStyle()
   const [phase, setPhase] = useState<'loading' | 'ready' | 'generating'>('loading')
   const [blob, setBlob] = useState<Blob>()
   const [url, setUrl] = useState('')
   const [message, setMessage] = useState('')
   const [attempt, setAttempt] = useState(0)
-  const identity = useMemo(() => coverIdentity(markdown, title), [markdown, title])
+  const articleIdentity = useMemo(() => coverIdentity(markdown, title), [markdown, title])
+  const identity = useMemo(() => JSON.stringify([VISUAL_DESIGN_VERSION, style, articleIdentity]), [articleIdentity, style])
   const jobKey = `${ratio}\0${identity}`
   const spec = COVERS.find((item) => item.key === ratio)!
 
@@ -201,18 +207,20 @@ function DynamicCoverStudio({ title, markdown, onToast }: Pick<CoverStudioProps,
     setBlob(undefined); setPhase('loading'); setMessage('')
     const job = pendingCover(jobKey)
     if (job) {
-      setPhase('generating'); setMessage('正在生成，可切换页签，完成后会保存到本机。')
+      setPhase('generating'); setMessage('封面生成中…')
       job.then((result) => {
         if (!current) return
         setBlob(result.blob)
-        setMessage(result.saved ? '已生成并保存到本机。请检查文字和裁切效果。' : '已生成，但本机保存失败，请及时下载。')
+        setMessage(result.saved ? '封面已生成' : '已生成，但浏览器未能保存，请及时下载。')
       }).catch((error) => {
         if (current) setMessage(error instanceof Error ? error.message : '生成失败')
       }).finally(() => { if (current) setPhase('ready') })
     } else {
+      const recovered = unsavedCover(jobKey)
+      if (recovered) { setBlob(recovered.blob); setPhase('ready'); setMessage('封面已生成，保存失败，请下载保留。'); return () => { current = false } }
       coverKey(identity, ratio).then((key) => storeCover(key)).then((saved) => {
         if (current) setBlob(saved)
-      }).catch(() => { if (current) setMessage('无法读取本机封面缓存，仍可生成和下载。') })
+      }).catch(() => { if (current) setMessage('暂时无法读取已保存封面。') })
         .finally(() => { if (current) setPhase('ready') })
     }
     return () => { current = false }
@@ -228,12 +236,12 @@ function DynamicCoverStudio({ title, markdown, onToast }: Pick<CoverStudioProps,
     if (pendingCover(jobKey)) { setAttempt((value) => value + 1); return }
     startCover(jobKey, async () => {
       const response = await fetch('/api/cover', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${code}` },
-        body: JSON.stringify({ title, article: markdown, ratio }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, article: markdown, ratio, style }),
       })
       if (!response.ok) {
         const error = await response.json().catch(() => ({}))
-        throw new Error(error.error || '封面服务暂不可用，请确认服务端已部署')
+        throw new Error(error.error || '封面服务暂不可用，请稍后重试')
       }
       const original = await response.blob()
       const image = await createImageBitmap(original)
@@ -262,23 +270,23 @@ function DynamicCoverStudio({ title, markdown, onToast }: Pick<CoverStudioProps,
     <div className={hasPresetCovers ? 'border-t border-[#EAE4DC] pt-5' : ''}>
       <p className="mb-4 text-xs leading-6 text-[#71717A]">
         {hasPresetCovers
-          ? '如需按改写后的正文重新生成，可填写体验口令触发实时 AI 封面（可选，单次约 30–40 秒，结果保存在当前浏览器）；未填口令可直接下载上方预制示例封面。'
-          : '根据当前标题和正文设计封面（可选）；每次生成一张，正文参考最多取前 16000 字。未填口令时可跳过封面，直接前往官方编辑器发布或自备封面。'}
+          ? '可下载示例封面，也可根据当前文章生成新封面。'
+          : '选择风格和比例，为文章生成封面。'}
       </p>
       <div className="flex flex-wrap items-center gap-3">
+        <VisualStylePicker value={style} onChange={setStyle} disabled={phase === 'generating'} />
         <label className="text-sm">封面比例 <select aria-label="封面比例" value={ratio} disabled={phase === 'generating'} onChange={(e) => setRatio(e.target.value as typeof ratio)} className="rounded-lg border p-2">{COVERS.map((item) => <option key={item.key} value={item.key}>{item.label} · {item.ratio}</option>)}</select></label>
-        <label className="text-sm">体验口令 <input type="password" autoComplete="off" aria-label="体验口令" placeholder="可选，由运营方提供" value={code} onChange={(e) => setCode(e.target.value)} className="w-40 rounded-lg border p-2" /></label>
-        <button type="button" className="primary-action" disabled={phase !== 'ready' || !code.trim() || !markdown.trim()} onClick={() => void generate()}>{phase === 'generating' ? '正在生成…' : blob ? '重新生成此比例' : '生成此比例'}</button>
-        {phase === 'generating' && <button type="button" className="text-action" onClick={() => { setPhase('ready'); setMessage('生成仍在后台继续，完成后会缓存。再次点击只会继续等待同一任务，不会重复下单。') }}>停止等待</button>}
+        <button type="button" className="primary-action" disabled={phase !== 'ready' || !markdown.trim()} onClick={() => void generate()}>{phase === 'generating' ? '正在生成…' : blob ? '重新生成此比例' : '生成此比例'}</button>
+        {phase === 'generating' && <button type="button" className="text-action" onClick={() => { setPhase('ready'); setMessage('封面仍在生成，稍后可回来查看。') }}>停止等待</button>}
       </div>
       {(message || phase === 'loading') && (
         <p role="status" className="my-3 text-xs leading-6 text-[#71717A]">
-          {message || '正在读取本机封面…'}
+          {message || '正在加载封面…'}
         </p>
       )}
       {url && <div className="my-4 max-w-2xl overflow-hidden rounded-xl border border-[#EAE4DC]">
         <img src={url} alt={`${title} · ${spec.label}生成封面`} className="h-auto w-full" />
-        <div className="flex items-center justify-between p-3 text-xs"><span>{spec.width}×{spec.height} · 居中裁切，请核对文字</span><a className="text-action" href={url} download={`prismpress-${ratio}.png`}>下载 PNG</a></div>
+        <div className="flex items-center justify-between p-3 text-xs"><span>{spec.width}×{spec.height}</span><a className="text-action" href={url} download={`prismpress-${ratio}.png`}>下载 PNG</a></div>
       </div>}
     </div>
   </div>

@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "PrismPress 发布助手（原型）",
+  "version": "0.4.0",
+  "description": "从PrismPress交付文章与配图至支持的平台空白编辑器，由用户检查、保存和发布。",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "host_permissions": [
+    "https://creator.xiaohongshu.com/*",
+    "https://creator.douyin.com/*",
+    "https://zhuanlan.zhihu.com/*",
+    "https://mp.csdn.net/*",
+    "https://juejin.cn/*",
+    "https://member.bilibili.com/*"
+  ],
+  "background": {
+    "service_worker": "background.mjs",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://prismpress-sigma.vercel.app/*",
+        "http://127.0.0.1:5175/*",
+        "http://localhost:5175/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}

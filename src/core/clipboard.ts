@@ -14,7 +14,7 @@ function copyPlainViaSelection(text: string): void {
   }
 }
 
-function copyRichViaSelection(html: string, plain: string): void {
+function copyRichViaSelection(html: string): void {
   const holder = document.createElement('div')
   holder.contentEditable = 'true'
   holder.style.position = 'fixed'
@@ -33,12 +33,12 @@ function copyRichViaSelection(html: string, plain: string): void {
     selection?.addRange(range)
     copied = document.execCommand('copy')
   } catch {
-    // A refused rich-text copy can still use the plain-text fallback.
+    // Report refusal instead of silently dropping images and formatting.
   } finally {
     selection?.removeAllRanges()
     document.body.removeChild(holder)
   }
-  if (!copied) copyPlainViaSelection(plain)
+  if (!copied) throw new Error('富文本复制失败，请允许剪贴板权限后重试')
 }
 
 /**
@@ -65,7 +65,7 @@ export async function copyCompiledArticle(result: CompileResult): Promise<void> 
     return
   }
 
-  copyRichViaSelection(result.body, result.plainText || result.body)
+  copyRichViaSelection(result.body)
 }
 
 export async function copyPlainText(text: string): Promise<void> {

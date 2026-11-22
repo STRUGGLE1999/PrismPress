@@ -30,13 +30,13 @@ export const PLATFORMS: PlatformProfile[] = [
       min: 0,
       max: 120,
       hardLimit: false,
-      note: '不填会默认抓正文前 54 字，极易抓到目录废话，建议主动填写。',
+      note: '建议填写简明摘要，帮助读者快速了解文章。',
     },
     tagsFormat: '#话题1 #话题2 #话题3（最多 3~5 个原创话题）',
     categoryRule: '原创声明 / 作者名 ≤ 8 字',
     coverRatio: '头条 2.35:1（900×383）；次条 1:1',
     editorUrl: 'https://mp.weixin.qq.com/',
-    protocolNote: '仅认内联 style；公式转 SVG；外链转文末参考资料角标；宽表格横向滑动护盾。',
+    protocolNote: '已适配公众号的标题、表格与参考资料排版。',
   },
   {
     id: 'xiaohongshu',
@@ -67,8 +67,8 @@ export const PLATFORMS: PlatformProfile[] = [
     tagsFormat: '#话题1 #话题2 #话题3（推荐 5~8 个高热垂直标签）',
     categoryRule: '图文笔记 · 3:4 竖版多图卡片 + 种草/干货短文案',
     coverRatio: '3:4 黄金竖版（1080×1440）',
-    editorUrl: 'https://creator.xiaohongshu.com/publish/publish?source=official',
-    protocolNote: '长文自动拆解为 3:4 杂志级知识图集（支持单张/全套 PNG 导出）+ ≤20 字爆款标题与 Emoji 分段文案。',
+    editorUrl: 'https://creator.xiaohongshu.com/publish/publish?source=official&target=image',
+    protocolNote: '文章已整理为竖版图集与发布文案。',
   },
   {
     id: 'douyin',
@@ -99,8 +99,8 @@ export const PLATFORMS: PlatformProfile[] = [
     tagsFormat: '#话题1 #话题2 #话题3（推荐 3~5 个算法兴趣标签 + BGM 建议）',
     categoryRule: '抖音图文 / 深度长图文 · 3:4 全屏划动卡片',
     coverRatio: '3:4 竖屏图集（1080×1440）',
-    editorUrl: 'https://creator.douyin.com/creator-micro/content/upload?default-tab=2',
-    protocolNote: '专为抖音图文划阅率设计：首图黄金 3 秒钩子 + 霓虹高反差 3:4 知识卡 + 配套挂车/互动文案与 BGM 推荐。',
+    editorUrl: 'https://creator.douyin.com/creator-micro/content/upload?default-tab=3',
+    protocolNote: '文章已整理为竖版图集与发布文案。',
   },
   {
     id: 'zhihu',
@@ -132,7 +132,7 @@ export const PLATFORMS: PlatformProfile[] = [
     categoryRule: '投稿专栏 + 关联 1~3 个高热问题',
     coverRatio: '16:9（推荐 1280×720）',
     editorUrl: 'https://zhuanlan.zhihu.com/write',
-    protocolNote: '仅支持两级标题；H3/H4 降维为 ▎/◆ 加粗高亮块，杜绝 ### 外露。',
+    protocolNote: '已适配知乎文章排版。',
   },
   {
     id: 'bilibili',
@@ -164,7 +164,7 @@ export const PLATFORMS: PlatformProfile[] = [
     categoryRule: '专栏分区（科技 / 生活 / 轻小说等）',
     coverRatio: '16:9 或 4:3',
     editorUrl: 'https://member.bilibili.com/platform/upload/text/edit',
-    protocolNote: '仅支持两级标题；H3/H4 编译为 ◆ 高亮段落；过滤复杂嵌套表格。',
+    protocolNote: '已适配B站专栏排版。',
   },
   {
     id: 'csdn',
@@ -192,8 +192,8 @@ export const PLATFORMS: PlatformProfile[] = [
     tagsFormat: '最多 5 个标签（逗号 / 回车分隔）',
     categoryRule: '分类专栏 + 文章类型（原创）',
     coverRatio: '16:9（推荐 1280×720）',
-    editorUrl: 'https://mp.csdn.net/mp_blog/creation/editor',
-    protocolNote: '标准 Markdown / KaTeX；顶部自动注入 @[TOC](文章目录)。',
+    editorUrl: 'https://editor.csdn.net/md/?not_checkout=1',
+    protocolNote: '保留 Markdown 格式，便于继续编辑。',
   },
   {
     id: 'juejin',
@@ -216,13 +216,13 @@ export const PLATFORMS: PlatformProfile[] = [
       min: 50,
       max: 100,
       hardLimit: true,
-      note: '强制 50~100 字，少于 50 字报错，多于 100 字截断。',
+      note: '摘要上限100字，建议50～100字。',
     },
     tagsFormat: '必选 1~3 个平台标签',
     categoryRule: '必选 1 个分类：后端 / 前端 / Android / iOS / 人工智能 / 开发工具 / 代码人生 / 阅读',
     coverRatio: '16:9 或 3:2（推荐 1300×730）',
     editorUrl: 'https://juejin.cn/editor/drafts/new',
-    protocolNote: 'ByteMD 标准 GFM；块级公式独立成段；标题空格与转义符净化。',
+    protocolNote: '保留 Markdown 格式，便于继续编辑。',
   },
 ]
 
@@ -242,4 +242,15 @@ export function resolveHeadingDemotion(platform: PlatformProfile, depth: number)
     .sort((a, b) => b.from - a.from)
     .find((item) => depth >= item.from)
   return rule?.marker ?? '▎'
+}
+
+/** Resolve a social platform's article or image-deck destination as one contract. */
+export function getPublicationPlatform(id: PlatformId, mode: 'article' | 'deck' = 'article'): PlatformProfile {
+  const base = getPlatform(id)
+  if ((id !== 'xiaohongshu' && id !== 'douyin') || mode === 'deck') return base
+  return { ...base, name: id === 'xiaohongshu' ? '小红书长文' : '抖音文章', format: 'html', editor: 'rich', clipboard: 'text/html',
+    summary: { ...base.summary, min: 0, max: id === 'douyin' ? 30 : base.summary.max },
+    titleMax: id === 'douyin' ? 30 : 64,
+    editorUrl: id === 'xiaohongshu' ? 'https://creator.xiaohongshu.com/publish/publish?source=official&target=article' : 'https://creator.douyin.com/creator-micro/content/upload?default-tab=5',
+    protocolNote: id === 'xiaohongshu' ? '保留全文排版；小红书长文中的图片需另行插入。' : '保留正文与配图的文章排版。' }
 }

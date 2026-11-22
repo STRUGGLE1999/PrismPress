@@ -22,7 +22,7 @@ const STEPS = [
   },
   {
     title: '回到 PrismPress 一键转链',
-    body: '把本地图片拖进左栏，点击「PicList 上传至 R2」，正文中的相对路径会自动替换为 R2 公网链接。',
+    body: '导入文章与配图，点击“上传到 PicList 默认图床”，文章中的图片地址会随之更新。',
   },
 ]
 
@@ -66,10 +66,10 @@ export function PicListGuideModal({ open, onClose, onToast }: PicListGuideModalP
               Image Hub
             </p>
             <h2 className="mt-1 text-lg font-bold text-[#27272A]">
-              PicList + Cloudflare R2 三分钟配置锦囊
+              PicList 与 R2 配置指南
             </h2>
             <p className="mt-1 text-xs text-[#71717A]">
-              让本地图片变成七端畅通的公开 HTTPS 链接，彻底告别防盗链 403。
+              将图片上传至图床，用于需要公开图片链接的平台。
             </p>
           </div>
           <button
@@ -116,9 +116,9 @@ export function PicListGuideModal({ open, onClose, onToast }: PicListGuideModalP
             <p className="text-xs font-bold text-[#27272A]">R2 公开访问建议</p>
             <ul className="mt-1.5 space-y-1 text-[11px] leading-5 text-[#52525B]">
               <li>· Bucket 需要开启 Public Access，或绑定自定义域名。</li>
-              <li>· 自定义域名更容易通过各平台图片白名单与防盗链校验。</li>
+              <li>· 上传后打开图片链接，确认可正常访问。</li>
               <li>· Access Key 只保存在本机 PicList，不要填进任何网页。</li>
-              <li>· 若浏览器提示 CORS 失败，请先在 PicList 中允许跨域，或改用 Canvas 内联兜底。</li>
+              <li>· 连接失败时，检查 PicList Server 是否开启并允许本站连接。</li>
             </ul>
           </div>
 

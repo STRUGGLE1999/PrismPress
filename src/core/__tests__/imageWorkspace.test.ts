@@ -65,3 +65,10 @@ it('编译后图片数据不进入净化原稿，行号和预览图片仍正确'
   expect(imageSources('![图](images/导入图片-1.png)', importedImageAssets(old, {}, true))).toEqual({})
   expect(importedImageAssets(old, {}, false)).toEqual(old)
 })
+
+it('uses retained image bytes for clipboard imports even after a public URL was saved', () => {
+  const dataUrl = 'data:image/png;base64,aGVsbG8='
+  const assets = { 'a.png': { name: 'a.png', file: new File(['hello'], 'a.png'), dataUrl, mime: 'image/png', bytes: 5, mode: 'remote' as const, remoteUrl: 'https://example.com/a.png' } }
+  expect(imageSources('![图](a.png)', assets, true)['a.png']).toBe(dataUrl)
+  expect(imageSources('![图](a.png)', assets)['a.png']).toBe('https://example.com/a.png')
+})

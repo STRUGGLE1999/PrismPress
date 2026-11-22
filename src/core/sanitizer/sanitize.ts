@@ -89,6 +89,7 @@ export function sanitizeMarkdown(input: string): SanitizeReport {
   const counter: Record<SanitizeRuleId, number> = {
     'heading-space': 0,
     'heading-bold': 0,
+    'quoted-bold': 0,
     'inline-math-padding': 0,
     'block-math-spacing': 0,
     'zero-width': 0,
@@ -135,6 +136,18 @@ export function sanitizeMarkdown(input: string): SanitizeReport {
       addFix('heading-bold', index, text, fixed)
       text = fixed
     }
+
+    if (!/^(?: {4}|\t)/.test(text)) text = outsideInlineCode(text, chunk =>
+      chunk.replace(/(?<![\\*])\*\*([^*\n]+?)\*\*(?!\*)/g, (whole, value: string) => {
+        const opening = value.match(/^[“「『（【]+/)?.[0] ?? ''
+        const closing = value.match(/[”」』）】]+$/)?.[0] ?? ''
+        const content = value.slice(opening.length, closing ? -closing.length : undefined)
+        if ((!opening && !closing) || !content.trim()) return whole
+        const fixed = `${opening}**${content}**${closing}`
+        addFix('quoted-bold', index, whole, fixed)
+        return fixed
+      }),
+    )
 
     // 4. 行内公式内侧空格
     text = outsideInlineCode(text, (chunk) =>

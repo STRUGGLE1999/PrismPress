@@ -67,6 +67,7 @@ export interface PlatformProfile {
   tagsFormat: string
   categoryRule: string
   coverRatio: string
+  titleMax?: number
   editorUrl: string
   protocolNote: string
 }
@@ -105,6 +106,7 @@ export interface ExternalLink {
 export type SanitizeRuleId =
   | 'heading-space'
   | 'heading-bold'
+  | 'quoted-bold'
   | 'inline-math-padding'
   | 'block-math-spacing'
   | 'zero-width'
@@ -179,6 +181,8 @@ export interface SlideCard {
   tableRows?: string[][]
   sourceLine: number
   tags: string[]
+  image?: { src: string; alt: string }
+  layout?: 'points' | 'steps' | 'comparison' | 'image'
 }
 
 /* ------------------------------------------------------------------ */
@@ -203,6 +207,8 @@ export interface CompileResult {
 }
 
 export interface CompileOptions {
+  publicationMode?: 'article' | 'deck'
+  deckMode?: 'full' | 'summary'
   passport?: { title: string; shortTitle20: string; tags: string[] }
   imageSources?: Record<string, string>
   /** 注入 TOC（仅 CSDN 默认开启，可覆盖） */

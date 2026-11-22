@@ -21,3 +21,6 @@ output/
 .env.*
 !.env.example
 .vercel/
+
+# Local visual experiments, excluded from the release
+/local-tests/

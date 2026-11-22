@@ -1,6 +1,8 @@
+import { hostImageSources, prepareDouyinImageSources } from './components/hostImages'
+import { withDeckDraft, type DeckDraft } from './components/deckDraft'
 import { workspaceBackup } from './components/workspaceBackup'
 import { loadSavedCovers } from './components/CoverStudio'
-import { applyAiPassport, passportState, subscribePassport } from './components/passportState'
+import { applyAiPassport, extractPassport, passportState, subscribePassport } from './components/passportState'
 import { PlatformIcon, PrismIcon } from '@/components/PrismIcon'
 import { useCallback, useEffect, useMemo, useSyncExternalStore, useRef, useState } from 'react'
 import {
@@ -12,7 +14,7 @@ import {
   copyCompiledArticle,
   copyPlainText,
   generatePassport,
-  getPlatform,
+  getPublicationPlatform,
   getRichTheme,
   sanitizeMarkdown,
   scanImages,
@@ -25,13 +27,14 @@ import { LeftWorkbench } from '@/components/LeftWorkbench'
 import { CenterPreview } from '@/components/CenterPreview'
 import { RightPassport } from '@/components/RightPassport'
 
-type PublishTab = 'passport' | 'covers' | 'relay'
+type PublishTab = 'passport' | 'covers'
 import { PicListGuideModal } from '@/components/PicListGuideModal'
 import { detachInlineImages, imageSources, imageChangeKey, referencedImageNames, importedImageAssets } from '@/components/imageWorkspace'
 import { resolveImageReport } from '@/core/images/radar'
 import { loadImageAssets, saveImageAssets } from '@/components/imageStorage'
 import type { LocalImageAsset } from '@/components/localImage'
 import prismBrandImage from '../assets/brand/prismpress-brand-transparent.png'
+import prismBrandAnimation from '../assets/brand/prismpress-logo-animated.gif'
 
 type ToastTone = 'success' | 'error' | 'info'
 
@@ -48,9 +51,13 @@ const TOAST_STYLE: Record<ToastTone, string> = {
 }
 
 function PrismMark() {
+  const [playing, setPlaying] = useState(false)
   return (
-    <div className="flex h-14 w-20 shrink-0 items-center justify-center">
-      <img src={prismBrandImage} alt="PrismPress 紫色棱镜与彩色纸张光束" className="h-full w-full object-contain" width={80} height={56} />
+    <div className="flex h-14 w-20 shrink-0 items-center justify-center" onMouseEnter={() => setPlaying(true)} onMouseLeave={() => setPlaying(false)} title="PrismPress · 悬停查看动画">
+      <picture className="h-full w-full">
+        <source media="(prefers-reduced-motion: reduce)" srcSet={prismBrandImage} />
+        <img src={playing ? prismBrandAnimation : prismBrandImage} alt="PrismPress 紫色棱镜与彩色纸张光束" className="h-full w-full object-contain" width={80} height={56} />
+      </picture>
     </div>
   )
 }
@@ -96,7 +103,11 @@ function App() {
   const [activeSampleId, setActiveSampleId] = useState<string | null>(
     initial ? initial.activeSampleId : DEFAULT_SAMPLE.id,
   )
+  const [deckDrafts, setDeckDrafts] = useState<Record<string, DeckDraft>>({})
+  const deckMode = 'summary' as const
+  const [selectedPublicationMode, setPublicationMode] = useState<'article' | 'deck'>('article')
   const [platformId, setPlatformId] = useState<PlatformId>(initial?.platformId ?? 'wechat')
+  const publicationMode = platformId === 'xiaohongshu' ? 'deck' : selectedPublicationMode
   const [themeId, setThemeId] = useState<ThemePreset>(initial?.themeId ?? DEFAULT_SAMPLE.themeId)
   const [workflowStep, setWorkflowStep] = useState<2 | 3>(2)
   const [editorOpen, setEditorOpen] = useState(false)
@@ -113,7 +124,6 @@ function App() {
   const [compiledTheme, setCompiledTheme] = useState<ThemePreset>(initial?.themeId ?? DEFAULT_SAMPLE.themeId)
   const [compiling, setCompiling] = useState(true)
   const [compileError, setCompileError] = useState<string | null>(null)
-  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
   const [toast, setToast] = useState<ToastState | null>(null)
   const [localImages, setLocalImages] = useState<Record<string, LocalImageAsset>>(recovered.assets)
   const [assetsReady, setAssetsReady] = useState(false)
@@ -124,16 +134,15 @@ function App() {
   const [locateRequest, setLocateRequest] = useState<{ line: number; nonce: number } | null>(null)
   const locateNonce = useRef(0)
   const toastTimer = useRef<number | null>(null)
-  const copyTimer = useRef<number | null>(null)
 
-  const platform = PLATFORMS.find((item) => item.id === platformId) ?? PLATFORMS[0]
+  const platform = getPublicationPlatform(platformId, publicationMode)
   const effectiveThemeId = platformId === 'wechat' ? themeId : DEFAULT_RICH_THEME_ID
   const theme = getRichTheme(effectiveThemeId)
 
   const sources = useMemo(() => imageSources(markdown, localImages), [markdown, localImages])
   const aiState = useSyncExternalStore(subscribePassport, () => passportState(markdown))
   const passport = useMemo(() => applyAiPassport(generatePassport(markdown), aiState.value), [markdown, aiState.value])
-  const contentKey = useMemo(() => imageChangeKey(markdown + Object.values(sources).map(imageChangeKey).join('|') + JSON.stringify(aiState.value ?? null)), [markdown, sources, aiState.value])
+  const contentKey = useMemo(() => imageChangeKey(publicationMode + deckMode + markdown + Object.values(imageSources(markdown, localImages, true)).map(imageChangeKey).join('|') + JSON.stringify(aiState.value ?? null)), [markdown, localImages, aiState.value, deckMode, publicationMode])
   const sanitize = useMemo(() => sanitizeMarkdown(markdown), [markdown])
   const analysis = useMemo(() => analyzeMarkdown(sanitize.output), [sanitize.output])
   const imageReport = useMemo(
@@ -142,10 +151,10 @@ function App() {
   )
 
   const totalFixes = useMemo(() => sanitize.counts.reduce((sum, item) => sum + item.count, 0), [sanitize.counts])
-  const warnImages = imageReport.red + imageReport.yellow
-  const checkSummary = `${totalFixes > 0 ? `已自动整理 ${totalFixes} 处格式` : '格式检查已通过'}${warnImages > 0 ? ` · ${warnImages} 张图片需关注` : imageReport.total > 0 ? ' · 图片状态正常' : ''}`
+  const warnImages = platform.format === 'deck' ? 0 : imageReport.red + imageReport.yellow
+  const checkSummary = `${totalFixes > 0 ? `已自动整理 ${totalFixes} 处格式` : '格式检查已通过'}${warnImages > 0 ? ` · ${warnImages} 张图片需关注` : imageReport.total > 0 ? ' · 图片链接已识别' : ''}`
   const localImageList = useMemo(() => Object.values(localImages), [localImages])
-  const copyKeys = useMemo(() => Object.fromEntries(PLATFORMS.map((item) => [item.id, `${item.id === 'wechat' ? themeId : DEFAULT_RICH_THEME_ID}\n${contentKey}`])) as Record<PlatformId, string>, [contentKey, themeId])
+  const copyKeys = useMemo(() => Object.fromEntries(PLATFORMS.map((item) => [item.id, `${item.id === 'wechat' ? themeId : DEFAULT_RICH_THEME_ID}\n${contentKey}\n${imageChangeKey(JSON.stringify(deckDrafts[`${item.id}:${contentKey}`] ?? null))}`])) as Record<PlatformId, string>, [contentKey, themeId, deckDrafts])
 
   const showToast = useCallback((message: string, tone: ToastTone = 'info') => {
     setToast({ message, tone, id: Date.now() })
@@ -183,7 +192,6 @@ function App() {
   useEffect(() => {
     return () => {
       if (toastTimer.current) window.clearTimeout(toastTimer.current)
-      if (copyTimer.current) window.clearTimeout(copyTimer.current)
     }
   }, [])
 
@@ -193,7 +201,7 @@ function App() {
     setCompileError(null)
 
     const timer = window.setTimeout(() => {
-      compileArticle(markdown, platformId, { themeId: effectiveThemeId, imageSources: sources, passport: aiState.value ? passport : undefined })
+      compileArticle(markdown, platformId, { publicationMode, deckMode, themeId: effectiveThemeId, imageSources: sources, passport: aiState.value ? passport : undefined })
         .then((compiled) => {
           if (!alive) return
           setResult(compiled)
@@ -203,7 +211,7 @@ function App() {
         })
         .catch((error: unknown) => {
           if (!alive) return
-          setCompileError(error instanceof Error ? error.message : '编译失败，请检查源稿')
+          setCompileError(error instanceof Error ? error.message : '暂时无法生成预览，请重试')
           setCompiling(false)
         })
     }, 150)
@@ -214,25 +222,24 @@ function App() {
     }
   }, [markdown, sources, platformId, effectiveThemeId, contentKey, passport])
 
-  const displayResult =
+  const baseResult =
     result &&
     result.platform.id === platformId &&
     result.sanitize.input === markdown &&
     compiledTheme === effectiveThemeId && compiledContentKey === contentKey
       ? result
       : null
+  const displayResult = withDeckDraft(baseResult, deckDrafts[`${platformId}:${contentKey}`])
 
   const handleMarkdownChange = (value: string) => {
     setMarkdown(value)
     setActiveSampleId(null)
-    setCopyState('idle')
   }
 
   const handleSelectSample = (sample: SampleArticle) => {
     setMarkdown(sample.markdown)
     setActiveSampleId(sample.id)
     setThemeId(sample.themeId)
-    setCopyState('idle')
     showToast(`已载入「${sample.name}」范文`, 'info')
   }
 
@@ -292,7 +299,6 @@ function App() {
     setLocalImages(nextAssets)
     if (next !== markdown) {
       setMarkdown(next)
-      setCopyState('idle')
     }
 
     if (loadedMarkdown) {
@@ -373,7 +379,7 @@ function App() {
       return merged
     })
     setImageBusy(null)
-    showToast(`已切换为本地图片模式，复制时自动携带图片数据`, 'success')
+    showToast(`已使用导入的图片`, 'success')
   }
 
   const handleRemoveImage = (name: string) => {
@@ -384,20 +390,25 @@ function App() {
     })
   }
 
-  const handleCopy = async () => {
-    if (!displayResult) return
-    try {
-      await copyCompiledArticle(displayResult)
-      setCopyState('copied')
-      setSynced((previous) => ({ ...previous, [platformId]: copyKeys[platformId] }))
-      showToast(`${platform.name}专属内容已写入剪贴板`, 'success')
-    } catch {
-      setCopyState('error')
-      showToast('复制失败，请检查浏览器剪贴板权限', 'error')
-    }
-    if (copyTimer.current) window.clearTimeout(copyTimer.current)
-    copyTimer.current = window.setTimeout(() => setCopyState('idle'), 2200)
+  const prepareCopy = async (id: PlatformId) => {
+    const inlineSources = imageSources(markdown, localImages, true)
+    const copySources = id === 'douyin' ? await prepareDouyinImageSources(inlineSources, imageReport.findings.map(image => image.url)) : id === 'xiaohongshu' ? sources : await hostImageSources(sources)
+    const updates = new Map(Object.entries(sources).map(([key, value]) => [value, copySources[key]]))
+    setLocalImages(previous => Object.fromEntries(Object.entries(previous).map(([name, asset]) => {
+      const url = updates.get(asset.dataUrl)
+      return [name, url && /^https:\/\//.test(url) && url !== asset.dataUrl ? { ...asset, mode: 'remote' as const, remoteUrl: url } : asset]
+    })))
+    return compileArticle(markdown, id, { publicationMode, deckMode, themeId: id === 'wechat' ? themeId : DEFAULT_RICH_THEME_ID, imageSources: copySources, passport: aiState.value ? passport : undefined })
   }
+
+  const summaryAttempts = useRef(new Set<string>())
+  useEffect(() => {
+    if (workflowStep !== 3 || !markdown.trim() || aiState.value || aiState.loading) return
+    const key = imageChangeKey(markdown)
+    if (summaryAttempts.current.has(key)) return
+    summaryAttempts.current.add(key)
+    void extractPassport(markdown, passport.title).catch(error => showToast(error instanceof Error ? error.message : '摘要生成失败，请点击重新提炼', 'error'))
+  }, [workflowStep, markdown, aiState.value, aiState.loading, passport.title, showToast])
 
   const handleCopyText = async (text: string, label: string) => {
     try {
@@ -417,32 +428,18 @@ function App() {
 
   const handleRelay = async (id: PlatformId) => {
     if (relaying) return
-    const profile = getPlatform(id)
-    const popup = window.open('', '_blank')
+    const profile = getPublicationPlatform(id, publicationMode)
     setRelaying(id)
 
     try {
-      const targetThemeId = id === 'wechat' ? themeId : DEFAULT_RICH_THEME_ID
-      const reusable =
-        result &&
-        result.platform.id === id &&
-        result.sanitize.input === markdown &&
-        compiledTheme === targetThemeId && compiledContentKey === contentKey
-          ? result
-          : null
-      const compiled = reusable ?? (await compileArticle(markdown, id, { themeId: targetThemeId, imageSources: sources, passport: aiState.value ? passport : undefined }))
-      await copyCompiledArticle(compiled)
+      const compiled = profile.format === 'deck' ? await compileArticle(markdown, id, { publicationMode, deckMode, imageSources: sources }) : await prepareCopy(id)
+      await copyCompiledArticle(withDeckDraft(compiled, deckDrafts[`${id}:${contentKey}`])!)
 
-      if (popup && !popup.closed) {
-        popup.location.href = profile.editorUrl
-      } else {
-        window.open(profile.editorUrl, '_blank', 'noopener,noreferrer')
-      }
+      window.open(profile.editorUrl, '_blank', 'noopener,noreferrer')
 
       setSynced((previous) => ({ ...previous, [id]: copyKeys[id] }))
-      showToast(`已复制${profile.name}专属格式，正在打开官方发布页`, 'success')
+      showToast(`正文已复制，请在${profile.shortName}正文编辑区粘贴，标题需单独填写。`, 'success')
     } catch (error) {
-      popup?.close()
       showToast(error instanceof Error ? error.message : `${profile.name}接力失败`, 'error')
     } finally {
       setRelaying(null)
@@ -483,9 +480,9 @@ function App() {
       </header>
       <main className="workflow-main">
         <div className="workflow-intro">
-          <p className="eyebrow">让内容抵达，少一点重复整理</p>
-          <h1>写好一篇，适配不同平台。</h1>
-          <p>导入 Markdown，预览平台排版，再带着正文、摘要与封面去发布。</p>
+          <p className="eyebrow">少一点重复整理，多一点创作时间</p>
+          <h1 className="hero-title" aria-label="一篇文章 适配多个平台"><span>一篇文章</span><span>适配多个平台</span></h1>
+          <p>导入 Markdown，预览各平台排版，自动生成摘要与标签，复制后前往发布。</p>
         </div>
         <div className="workspace-toolbar">
           <nav className="workspace-views" aria-label="工作区">
@@ -503,12 +500,16 @@ function App() {
         {saveState === 'error' && <div className="save-warning" role="alert">当前浏览器未能保存草稿。请先<button type="button" onClick={downloadSource}>下载原稿备份</button>并保留原始配图文件夹，避免刷新后丢失修改。</div>}
         {workflowStep !== 3 && <>
           <section className="platform-selection">
-            <div><h2>切换平台，查看成品</h2><p>原稿修改后自动更新预览，发布前请在官方编辑器确认效果。</p></div>
-            <nav className="platform-options" aria-label="选择发布平台">{PLATFORMS.map((item) => <button type="button" key={item.id} aria-pressed={item.id === platformId} onClick={() => { setPlatformId(item.id); setCopyState('idle') }}><PlatformIcon id={item.id} />{item.shortName}</button>)}</nav>
+            <div><h2>切换平台，查看成品</h2><p>选择平台，查看适合的排版。</p></div>
+            <nav className="platform-options" aria-label="选择发布平台">{PLATFORMS.map((item) => <button type="button" key={item.id} aria-pressed={item.id === platformId} onClick={() => { setPlatformId(item.id); }}><PlatformIcon id={item.id} />{item.shortName}</button>)}</nav>
           </section>
-          <div className="preview-caption"><span>{analysis.title || '未命名文章'} · {imageReport.total} 张原稿图片 · {checkSummary}</span><button type="button" className="text-action" aria-expanded={editorOpen} onClick={() => setEditorOpen((open) => !open)}>{editorOpen ? '收起原稿' : '修改原稿 / 选择示例'}</button></div>
-          {imageReport.red > 0 && <div className="missing-images" role="status">
-            <div><strong>{imageReport.red} 张图片尚未就绪</strong><p>Markdown 只保存图片路径。选择文章的配图文件夹后，平台会自动匹配，不需要逐张替换。</p>
+          {platformId === 'douyin' && <nav className="publication-mode" aria-label="内容形式">
+            <button type="button" aria-pressed={publicationMode === 'article'} onClick={() => { setPublicationMode('article'); }}>发布文章</button>
+            <button type="button" aria-pressed={publicationMode === 'deck'} onClick={() => { setPublicationMode('deck'); }}>生成图集</button>
+          </nav>}
+          <div className="preview-caption"><span className="preview-article-title" title={analysis.title || '未命名文章'}>{analysis.title || '未命名文章'}</span><span className="preview-article-status">{imageReport.total} 张图片 · {checkSummary}</span><button type="button" className="text-action" aria-expanded={editorOpen} onClick={() => setEditorOpen((open) => !open)}>{editorOpen ? '收起原稿' : '修改原稿 / 选择示例'}</button></div>
+          {platform.format !== 'deck' && imageReport.red > 0 && <div className="missing-images" role="status">
+            <div><strong>{imageReport.red} 张图片尚未就绪</strong><p>选择配图文件夹，自动补齐文章图片。</p>
               <ul>{imageReport.findings.filter((item) => item.health === 'red').map((item, index) => <li key={`${item.url}-${index}`}>{item.url} — {item.reason}</li>)}</ul>
             </div>
             <button type="button" className="secondary-action" onClick={() => folderInput.current?.click()}>读取配图文件夹</button>
@@ -521,20 +522,20 @@ function App() {
             onOpenGuide={() => setGuideOpen(true)} onRemoveImage={handleRemoveImage} />}
           <div className="live-preview">
           <CenterPreview platformId={platformId} platform={platform} themeId={themeId} theme={theme} result={displayResult} passport={passport}
-            compiling={compiling} compileError={compileError} onThemeChange={(id) => { setThemeId(id); setCopyState('idle') }} onCopyText={handleCopyText} onLocate={handleLocate} onToast={showToast} />
+            compiling={compiling} deckKey={contentKey} onDeckDraftChange={(draft) => setDeckDrafts(previous => ({ ...previous, [`${platformId}:${contentKey}`]: draft }))} compileError={compileError} onThemeChange={(id) => { setThemeId(id); }} onCopyText={handleCopyText} onLocate={handleLocate} onToast={showToast} />
           </div></div>
-          <div className="step-actions"><p>{saveState === 'saving' ? '正在保存原稿与配图…' : saveState === 'saved' ? '原稿与配图已保存' : '保存失败，请保留原稿与配图'} · 可随时切换平台</p><button type="button" className="primary-action" disabled={!displayResult || compiling} onClick={() => { setStageTab('passport'); setWorkflowStep(3) }}>准备发布 <span aria-hidden="true">→</span></button></div>
+          <div className="step-actions"><p>{saveState === 'saving' ? '正在保存原稿与配图…' : saveState === 'saved' ? '原稿与配图已保存' : '保存失败，请保留原稿与配图'}</p><button type="button" className="primary-action" disabled={!displayResult || compiling} onClick={() => { setStageTab('passport'); setWorkflowStep(3) }}>准备发布 <span aria-hidden="true">→</span></button></div>
         </>}
         {workflowStep === 3 && <section className="publication-workspace">
-          <div className="publication-header"><div className="flex items-center gap-3"><PlatformIcon id={platformId} /><div><h2>把文章交给{platform.shortName}</h2><p>{platform.format === 'deck' ? '图集请在预览页下载，这里准备配套文案和素材。' : '先复制适配后的正文，再按需要补齐发布资料。'}</p></div></div><button type="button" className="primary-action" disabled={!displayResult || compiling} onClick={handleCopy}><PrismIcon name="copy" />{copyState === 'copied' && synced[platformId] === copyKeys[platformId] ? '已复制当前内容' : platform.format === 'deck' ? '复制配套文案' : '复制正文'}</button></div>
+          <div className="publication-header"><div className="flex items-center gap-3"><PlatformIcon id={platformId} /><div><h2>把文章交给{platform.shortName}</h2><p>{platform.format === 'deck' ? '复制发布文案，上传图集。' : '复制正文，准备标题与摘要。'}</p></div></div></div>
           <nav className="publication-tabs" aria-label="发布准备选项">
-            {([{ id: 'passport', label: '标题与摘要' }, { id: 'covers', label: '封面（可选）' }, { id: 'relay', label: '打开发布页' }] as const).map((item) => <button type="button" key={item.id} aria-current={stageTab === item.id ? 'page' : undefined} onClick={() => setStageTab(item.id)}>{item.label}</button>)}
+            {([{ id: 'passport', label: '正文与标题' }, { id: 'covers', label: '封面（可选）' }] as const).map((item) => <button type="button" key={item.id} aria-current={stageTab === item.id ? 'page' : undefined} onClick={() => setStageTab(item.id)}>{item.label}</button>)}
           </nav>
-          <RightPassport aiLoading={aiState.loading} hasAi={Boolean(aiState.value)} markdown={markdown} passport={passport} platform={platform} platforms={PLATFORMS} theme={theme} copyKeys={copyKeys} synced={synced} relaying={relaying}
-            section={stageTab} checkSummary={checkSummary} onCopyText={handleCopyText} onRelay={handleRelay} onSelectPlatform={(id) => { setPlatformId(id); setCopyState('idle'); setWorkflowStep(2) }} onToast={showToast} />
-          <div className="step-actions inside"><button type="button" className="text-action" onClick={() => setWorkflowStep(2)}>← 返回平台预览</button>{stageTab !== 'relay' && <button type="button" className="secondary-action" onClick={() => setStageTab('relay')}>继续：打开发布页 →</button>}</div>
+          <RightPassport aiLoading={aiState.loading} hasAi={Boolean(aiState.value)} markdown={markdown} passport={passport} platform={platform} theme={theme} copyKeys={copyKeys} synced={synced} relaying={relaying}
+            section={stageTab} checkSummary={checkSummary} onCopyText={handleCopyText} onRelay={handleRelay} onToast={showToast} />
+          <div className="step-actions inside"><button type="button" className="text-action" onClick={() => setWorkflowStep(2)}>← 返回平台预览</button></div>
         </section>}
-        <footer className="product-footer"><span>原稿本机保存 · 无需绑定平台账号</span><details><summary>使用与隐私说明</summary><p>原稿、配图和复制记录保存在当前浏览器，清理浏览器数据会删除它们。请下载原稿备份。远程图片会请求对应图床；只有主动点击上传时才请求本机 PicList。仅主动点击生成封面时，标题与正文参考会经服务端发送至 AIArtMirror；封面保存在当前浏览器。主动点击 AI 智能提炼时，标题与正文参考会经服务端发送至 aicodemirror.ai，用于生成发布资料，结果缓存在当前浏览器。PrismPress 不替你登录或发布，粘贴后的排版与图片仍需在官方编辑器确认。</p></details></footer>
+        <footer className="product-footer"><details><summary>使用与隐私说明</summary><p>草稿与素材保存在当前浏览器，不跨设备同步；清理浏览器数据会删除记录，可通过“完整备份”保存。加载远程图片会访问图片来源；复制正文时，部分平台的引用配图会上传至 PrismPress 的 Vercel Blob 公开存储，正文不上传。任何持有图片链接的人均可访问；清理浏览器不会删除云端图片。使用 PicList 上传会连接本机 PicList。首次进入准备发布时，标题与全文会发送至 aicodemirror.ai 提炼摘要和标签，同稿读取缓存不重复请求，可手动重新提炼。点击生成封面时，正文参考会发送至 AIArtMirror。图集模板排版不调用 AI 服务。发布由你在所选平台完成。</p></details></footer>
       </main>
 
       <PicListGuideModal open={guideOpen} onClose={() => setGuideOpen(false)} onToast={showToast} />

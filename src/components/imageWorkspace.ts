@@ -25,10 +25,10 @@ export function referencedImageNames(markdown: string, names: string[]): Set<str
   return new Set(Object.values(imageSourceNames(markdown, names)))
 }
 
-export function imageSources(markdown: string, assets: Record<string, LocalImageAsset>): Record<string, string> {
+export function imageSources(markdown: string, assets: Record<string, LocalImageAsset>, preferInline = false): Record<string, string> {
   return Object.fromEntries(Object.entries(imageSourceNames(markdown, Object.keys(assets))).map(([source, name]) => {
     const asset = assets[name]
-    return [source, asset.mode === 'remote' && asset.remoteUrl ? asset.remoteUrl : asset.dataUrl]
+    return [source, !preferInline && asset.mode === 'remote' && asset.remoteUrl ? asset.remoteUrl : asset.dataUrl]
   }))
 }
 

@@ -84,7 +84,7 @@ export function LeftWorkbench({ markdown, stats, sanitize, imageReport, samples,
       <div className="editor-toolbar">
         <div>
           <h2>准备一篇文章</h2>
-          <p>导入 Markdown，或先用真实博客走一遍流程。</p>
+          <p>导入文章，或选择示例开始。</p>
         </div>
         <input ref={inputRef} type="file" multiple accept=".md,.markdown,.txt,image/*" className="hidden"
           onChange={(event) => { if (event.target.files) onImportFiles(event.target.files); event.target.value = '' }} />
@@ -114,7 +114,7 @@ export function LeftWorkbench({ markdown, stats, sanitize, imageReport, samples,
       <details className="advanced-tools">
         <summary>格式检查与图片工具 <span>{totalFixes ? `${totalFixes} 处格式已整理` : '格式检查已完成'}{imageReport.red + imageReport.yellow > 0 ? ` · ${imageReport.red + imageReport.yellow} 张图片需关注` : ''}</span></summary>
         <div className="advanced-body">
-          <p>预览会自动整理标题与公式格式。图片提示基于地址分类，未逐张联网检测。</p>
+          <p>查看格式调整与图片地址。</p>
           {totalFixes > 0 && <div className="space-y-2">
             <button type="button" className="secondary-action" onClick={() => onMarkdownChange(sanitize.output)}>将格式修正写回原稿</button>
             {sanitize.counts.filter((item) => item.count > 0).map((item) => <p key={item.rule}>{item.label}：{item.count} 处</p>)}
@@ -135,11 +135,11 @@ export function LeftWorkbench({ markdown, stats, sanitize, imageReport, samples,
               <button type="button" className="secondary-action" disabled={imageBusy !== null} onClick={onPicListUpload}>{imageBusy === 'piclist' ? '上传中…' : '上传到 PicList 默认图床'}</button>
               <button type="button" className="secondary-action" disabled={imageBusy !== null} onClick={onInlineConvert}>使用本地图片</button>
             </div>
-            <p>原稿保留短路径；复制正文时自动携带图片数据。公众号粘贴后仍需检查图片转存结果。</p>
+            <p>已导入的图片会随正文一起复制。</p>
           </div>}
           <div className="flex flex-wrap gap-3">
             <button type="button" className="text-action" onClick={onOpenGuide}>PicList 配置说明</button>
-            <button type="button" className="text-action" onClick={() => onSelectSample(CSDN_COMPARISON_SAMPLE)}>载入同篇 CSDN 图床对照稿</button>
+            <button type="button" className="text-action" onClick={() => onSelectSample(CSDN_COMPARISON_SAMPLE)}>查看图床示例</button>
           </div>
         </div>
       </details>

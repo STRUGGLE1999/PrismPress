@@ -33,7 +33,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
  */
 export async function compressImageToDataUrl(
   file: File,
-  options: { maxWidth?: number; maxHeight?: number; quality?: number } = {},
+  options: { maxWidth?: number; maxHeight?: number; quality?: number; minWidth?: number; minHeight?: number } = {},
 ): Promise<CompressedImage> {
   const maxWidth = options.maxWidth ?? 1400
   const maxHeight = options.maxHeight ?? 2600
@@ -45,26 +45,26 @@ export async function compressImageToDataUrl(
   const height = Math.max(1, Math.round(image.naturalHeight * scale))
 
   const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
+  canvas.width = Math.max(width, options.minWidth ?? 0)
+  canvas.height = Math.max(height, options.minHeight ?? 0)
   const context = canvas.getContext('2d')
   if (!context) throw new Error('当前浏览器不支持 Canvas')
 
   const keepPng = file.type === 'image/png' && file.size < 1_200_000
-  if (!keepPng) {
+  if (!keepPng || canvas.width !== width || canvas.height !== height) {
     context.fillStyle = '#FFFFFF'
-    context.fillRect(0, 0, width, height)
+    context.fillRect(0, 0, canvas.width, canvas.height)
   }
   context.imageSmoothingEnabled = true
   context.imageSmoothingQuality = 'high'
-  context.drawImage(image, 0, 0, width, height)
+  context.drawImage(image, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height)
 
   const mime = keepPng ? 'image/png' : 'image/jpeg'
   const dataUrl = canvas.toDataURL(mime, keepPng ? undefined : quality)
   return {
     dataUrl,
-    width,
-    height,
+    width: canvas.width,
+    height: canvas.height,
     bytes: Math.round((dataUrl.length * 3) / 4),
     mime,
   }

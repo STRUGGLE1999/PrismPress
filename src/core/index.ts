@@ -14,7 +14,7 @@ export type {
   SummaryRule,
   PassportCategory,
 } from './metadata/passport'
-export { PLATFORMS, PLATFORM_MAP, getPlatform, resolveHeadingDemotion } from './platforms/registry'
+export { PLATFORMS, PLATFORM_MAP, getPlatform, getPublicationPlatform, resolveHeadingDemotion } from './platforms/registry'
 export { compileArticle } from './platforms/compile'
 export { renderRichDocument } from './platforms/rich/renderer'
 export { transformMarkdown } from './platforms/markdown/transform'
