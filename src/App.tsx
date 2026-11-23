@@ -97,18 +97,19 @@ function loadWorkspace(): PersistedWorkspace | null {
 }
 
 function App() {
-  const initial = useMemo(() => loadWorkspace(), [])
-  const recovered = useMemo(() => detachInlineImages(initial?.markdown ?? DEFAULT_SAMPLE.markdown), [initial])
+  const [savedWorkspace, setSavedWorkspace] = useState(loadWorkspace)
+  const [workspaceEdited, setWorkspaceEdited] = useState(false)
+  const recovered = useMemo(() => detachInlineImages(DEFAULT_SAMPLE.markdown), [])
   const [markdown, setMarkdown] = useState(recovered.markdown)
   const [activeSampleId, setActiveSampleId] = useState<string | null>(
-    initial ? initial.activeSampleId : DEFAULT_SAMPLE.id,
+    DEFAULT_SAMPLE.id,
   )
   const [deckDrafts, setDeckDrafts] = useState<Record<string, DeckDraft>>({})
   const deckMode = 'summary' as const
   const [selectedPublicationMode, setPublicationMode] = useState<'article' | 'deck'>('article')
-  const [platformId, setPlatformId] = useState<PlatformId>(initial?.platformId ?? 'wechat')
+  const [platformId, setPlatformId] = useState<PlatformId>('wechat')
   const publicationMode = platformId === 'xiaohongshu' ? 'deck' : selectedPublicationMode
-  const [themeId, setThemeId] = useState<ThemePreset>(initial?.themeId ?? DEFAULT_SAMPLE.themeId)
+  const [themeId, setThemeId] = useState<ThemePreset>(DEFAULT_SAMPLE.themeId)
   const [workflowStep, setWorkflowStep] = useState<2 | 3>(2)
   const [editorOpen, setEditorOpen] = useState(false)
   const importInput = useRef<HTMLInputElement>(null)
@@ -121,7 +122,7 @@ function App() {
   const [saveState, setSaveState] = useState<'saving' | 'saved' | 'error'>('saving')
   const [result, setResult] = useState<CompileResult | null>(null)
   const [compiledContentKey, setCompiledContentKey] = useState('')
-  const [compiledTheme, setCompiledTheme] = useState<ThemePreset>(initial?.themeId ?? DEFAULT_SAMPLE.themeId)
+  const [compiledTheme, setCompiledTheme] = useState<ThemePreset>(DEFAULT_SAMPLE.themeId)
   const [compiling, setCompiling] = useState(true)
   const [compileError, setCompileError] = useState<string | null>(null)
   const [toast, setToast] = useState<ToastState | null>(null)
@@ -129,7 +130,7 @@ function App() {
   const [assetsReady, setAssetsReady] = useState(false)
   const [imageBusy, setImageBusy] = useState<'piclist' | 'inline' | null>(null)
   const [guideOpen, setGuideOpen] = useState(false)
-  const [synced, setSynced] = useState<Partial<Record<PlatformId, string>>>(Object.keys(recovered.assets).length ? {} : initial?.synced ?? {})
+  const [synced, setSynced] = useState<Partial<Record<PlatformId, string>>>({})
   const [relaying, setRelaying] = useState<PlatformId | null>(null)
   const [locateRequest, setLocateRequest] = useState<{ line: number; nonce: number } | null>(null)
   const locateNonce = useRef(0)
@@ -164,19 +165,17 @@ function App() {
 
   useEffect(() => {
     let active = true
-    void loadImageAssets().then((assets) => {
-      if (active) setLocalImages((current) => ({ ...assets, ...current }))
-    }).catch(() => { if (active) setSaveState('error') })
+    void loadImageAssets().catch(() => { if (active) setSaveState('error') })
       .finally(() => { if (active) setAssetsReady(true) })
     return () => { active = false }
   }, [])
 
   useEffect(() => {
-    if (assetsReady) assetSave.current = saveImageAssets(localImages)
-  }, [assetsReady, localImages])
+    if (assetsReady && workspaceEdited) assetSave.current = saveImageAssets(localImages)
+  }, [assetsReady, localImages, workspaceEdited])
 
   useEffect(() => {
-    if (!assetsReady) return
+    if (!assetsReady || !workspaceEdited) return
     let active = true
     setSaveState('saving')
     const payload: PersistedWorkspace = { typographyVersion: 1, markdown, activeSampleId, platformId, themeId, synced }
@@ -184,10 +183,11 @@ function App() {
     void assetSave.current.then(() => {
       if (!active) return
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
+      setSavedWorkspace(payload)
       setSaveState('saved')
     }).catch(() => { if (active) setSaveState('error') })
     return () => { active = false }
-  }, [assetsReady, markdown, activeSampleId, platformId, themeId, synced, localImages])
+  }, [assetsReady, markdown, activeSampleId, platformId, themeId, synced, localImages, workspaceEdited])
 
   useEffect(() => {
     return () => {
@@ -232,15 +232,43 @@ function App() {
   const displayResult = withDeckDraft(baseResult, deckDrafts[`${platformId}:${contentKey}`])
 
   const handleMarkdownChange = (value: string) => {
+    importToken.current += 1
+    setImportProgress(null)
+    setWorkspaceEdited(true)
     setMarkdown(value)
     setActiveSampleId(null)
   }
 
   const handleSelectSample = (sample: SampleArticle) => {
+    importToken.current += 1
+    setImportProgress(null)
+    setWorkspaceEdited(false)
+    setLocalImages({})
     setMarkdown(sample.markdown)
     setActiveSampleId(sample.id)
     setThemeId(sample.themeId)
     showToast(`已载入「${sample.name}」范文`, 'info')
+  }
+
+  const restoreWorkspace = async () => {
+    if (!savedWorkspace) return
+    const token = ++importToken.current
+    try {
+      await assetSave.current
+      const assets = await loadImageAssets()
+      if (token !== importToken.current) return
+      const draft = detachInlineImages(savedWorkspace.markdown)
+      setLocalImages({ ...assets, ...draft.assets })
+      setMarkdown(draft.markdown)
+      setActiveSampleId(savedWorkspace.activeSampleId)
+      setPlatformId(savedWorkspace.platformId)
+      setThemeId(savedWorkspace.themeId)
+      setSynced(savedWorkspace.synced)
+      setWorkspaceEdited(true)
+      setWorkflowStep(2)
+      setImportProgress(null)
+      showToast('已恢复上次保存的文章与配图', 'success')
+    } catch { showToast('未能恢复配图，原草稿已保留，请重试', 'error') }
   }
 
   const handleImportFiles = async (files: FileList | File[], imagesOnly = false) => {
@@ -253,15 +281,20 @@ function App() {
     )
     const imageFiles = list.filter((file) => file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(file.name))
 
+    if (markdownFiles.length > 1) {
+      showToast('一次请选择一篇 Markdown 文章，可同时选择它的配图；当前文章未更换', 'info')
+      return
+    }
+
     let next = markdown
     let loadedMarkdown = false
     if (markdownFiles.length > 0) {
       try {
         next = await markdownFiles[0].text()
         loadedMarkdown = true
-        setActiveSampleId(null)
       } catch {
         showToast('读取 Markdown 文件失败', 'error')
+        return
       }
     }
 
@@ -302,6 +335,8 @@ function App() {
     }
 
     if (loadedMarkdown) {
+      setActiveSampleId(null)
+      setWorkspaceEdited(true)
       setWorkflowStep(2)
       setEditorOpen(false)
     }
@@ -318,7 +353,7 @@ function App() {
     } else if (loadedMarkdown) {
       showToast(`已导入「${markdownFiles[0]?.name ?? 'Markdown'}」`, 'success')
     } else if (imageFiles.length > 0) {
-      showToast(`已关联 ${processed} 张图片，跳过 ${skipped} 张无关图片`, 'success')
+      showToast(`仅为当前文章补充 ${processed} 张图片，正文未更换；${skipped} 张未被当前文章引用。导入新文章请先选择 Markdown 文件。`, 'info')
     } else {
       showToast('未识别到可导入文件，请拖入 .md 或图片', 'error')
     }
@@ -493,9 +528,10 @@ function App() {
           <input ref={folderInput} type="file" multiple {...{ webkitdirectory: '', directory: '' }} className="hidden" onChange={(event) => { if (event.target.files) void handleImportFiles(event.target.files, true); event.target.value = '' }} />
           <div className="flex flex-wrap gap-2">
             <button type="button" className="secondary-action" onClick={() => importInput.current?.click()}><PrismIcon name="upload" />导入文章</button>
-            <button type="button" className="secondary-action" onClick={() => folderInput.current?.click()}>导入配图文件夹</button>
+            <button type="button" className="secondary-action" onClick={() => folderInput.current?.click()}>为当前文章补充配图</button>
           </div>
         </div>
+        {!workspaceEdited && <div className="missing-images" role="status"><span>正在查看示例「{SAMPLE_ARTICLES.find(sample => sample.id === activeSampleId)?.name ?? '图床对照'}」。{savedWorkspace ? '上次保存的文章已保留。' : '导入 Markdown 开始编辑自己的文章。'}</span>{savedWorkspace && <button type="button" className="secondary-action" onClick={() => void restoreWorkspace()}>继续上次编辑</button>}</div>}
         {importProgress && <div className="missing-images" role="status"><span>正在处理文章配图 {importProgress.done} / {importProgress.total}，已跳过 {importProgress.skipped} 张无关图片。</span><button type="button" className="text-action" onClick={() => { importToken.current += 1; setImportProgress(null); showToast('已取消导入，原稿和已保存配图未修改', 'info') }}>取消导入</button></div>}
         {saveState === 'error' && <div className="save-warning" role="alert">当前浏览器未能保存草稿。请先<button type="button" onClick={downloadSource}>下载原稿备份</button>并保留原始配图文件夹，避免刷新后丢失修改。</div>}
         {workflowStep !== 3 && <>
@@ -524,7 +560,7 @@ function App() {
           <CenterPreview platformId={platformId} platform={platform} themeId={themeId} theme={theme} result={displayResult} passport={passport}
             compiling={compiling} deckKey={contentKey} onDeckDraftChange={(draft) => setDeckDrafts(previous => ({ ...previous, [`${platformId}:${contentKey}`]: draft }))} compileError={compileError} onThemeChange={(id) => { setThemeId(id); }} onCopyText={handleCopyText} onLocate={handleLocate} onToast={showToast} />
           </div></div>
-          <div className="step-actions"><p>{saveState === 'saving' ? '正在保存原稿与配图…' : saveState === 'saved' ? '原稿与配图已保存' : '保存失败，请保留原稿与配图'}</p><button type="button" className="primary-action" disabled={!displayResult || compiling} onClick={() => { setStageTab('passport'); setWorkflowStep(3) }}>准备发布 <span aria-hidden="true">→</span></button></div>
+          <div className="step-actions"><p>{!workspaceEdited ? '示例预览不会覆盖已保存的文章' : saveState === 'saving' ? '正在保存原稿与配图…' : saveState === 'saved' ? '原稿与配图已保存' : '保存失败，请保留原稿与配图'}</p><button type="button" className="primary-action" disabled={!displayResult || compiling} onClick={() => { setStageTab('passport'); setWorkflowStep(3) }}>准备发布 <span aria-hidden="true">→</span></button></div>
         </>}
         {workflowStep === 3 && <section className="publication-workspace">
           <div className="publication-header"><div className="flex items-center gap-3"><PlatformIcon id={platformId} /><div><h2>把文章交给{platform.shortName}</h2><p>{platform.format === 'deck' ? '复制发布文案，上传图集。' : '复制正文，准备标题与摘要。'}</p></div></div></div>

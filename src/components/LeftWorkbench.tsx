@@ -84,32 +84,32 @@ export function LeftWorkbench({ markdown, stats, sanitize, imageReport, samples,
       <div className="editor-toolbar">
         <div>
           <h2>准备一篇文章</h2>
-          <p>导入文章，或选择示例开始。</p>
+          <p>选择 Markdown 正文，可同时选择配图；只选图片不会更换文章。</p>
         </div>
         <input ref={inputRef} type="file" multiple accept=".md,.markdown,.txt,image/*" className="hidden"
           onChange={(event) => { if (event.target.files) onImportFiles(event.target.files); event.target.value = '' }} />
         <button type="button" className="secondary-action" onClick={() => inputRef.current?.click()}>
-          <PrismIcon name="upload" /> 导入文件
+          <PrismIcon name="upload" /> 导入文章与配图
         </button>
       </div>
       <div className="sample-picker">
-        <label htmlFor="real-article">真实示例</label>
+        <label htmlFor="real-article">当前内容</label>
         <select id="real-article" value={activeSampleId ?? ''} onChange={(event) => {
           const sample = samples.find((item) => item.id === event.target.value)
           if (sample) onSelectSample(sample)
         }}>
-          <option value="" disabled>正在编辑自己的文章</option>
+          <option value="" disabled>我的文章</option>
           {activeSampleId === CSDN_COMPARISON_SAMPLE.id && <option value={CSDN_COMPARISON_SAMPLE.id}>AI 工程五级进阶 · CSDN 图床对照</option>}
           {samples.map((sample) => <option key={sample.id} value={sample.id}>{sample.name}</option>)}
         </select>
-        <span>完整正文与真实配图</span>
+        <span>{activeSampleId ? '示例文章 · 可切换或导入自己的文章' : '已导入或修改的正文'}</span>
       </div>
       <label htmlFor="article-source" className="sr-only">文章 Markdown 内容</label>
       <textarea id="article-source" ref={textareaRef} value={markdown} onChange={(event) => onMarkdownChange(event.target.value)}
         spellCheck={false} className="source-textarea" placeholder="# 输入文章标题\n\n在这里粘贴 Markdown 正文，也可以拖入 .md 文件和配图。" />
       <div className="editor-footnote">
         <span>{stats.characters.toLocaleString('zh-CN')} 字 · {imageReport.total} 张图片 · 约 {stats.readingMinutes} 分钟阅读</span>
-        <span role="status">{locatedLine !== null ? `已定位原稿第 ${locatedLine} 行 · ` : ''}{saveState === 'saving' ? '正在保存原稿与配图…' : saveState === 'saved' ? '原稿与配图已保存' : '保存失败，请保留原稿与配图'}</span>
+        <span role="status">{locatedLine !== null ? `已定位原稿第 ${locatedLine} 行 · ` : ''}{activeSampleId ? '正在查看示例' : saveState === 'saving' ? '正在保存原稿与配图…' : saveState === 'saved' ? '原稿与配图已保存' : '保存失败，请保留原稿与配图'}</span>
       </div>
       <details className="advanced-tools">
         <summary>格式检查与图片工具 <span>{totalFixes ? `${totalFixes} 处格式已整理` : '格式检查已完成'}{imageReport.red + imageReport.yellow > 0 ? ` · ${imageReport.red + imageReport.yellow} 张图片需关注` : ''}</span></summary>
