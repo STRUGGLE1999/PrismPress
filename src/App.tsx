@@ -545,9 +545,11 @@ function App() {
           <input ref={importInput} type="file" multiple accept=".md,.markdown,.txt,image/*" className="hidden" onChange={(event) => { if (event.target.files) chooseImport(event.target.files); event.target.value = '' }} />
           <input ref={folderInput} type="file" multiple {...{ webkitdirectory: '', directory: '' }} className="hidden" onChange={(event) => { if (event.target.files) void handleImportFiles(event.target.files, true); event.target.value = '' }} />
           <input ref={articleFolderInput} type="file" multiple {...{ webkitdirectory: '', directory: '' }} className="hidden" onChange={(event) => { if (event.target.files) chooseImport(event.target.files); event.target.value = '' }} />
-          <button type="button" className="secondary-action" onClick={() => { setPendingImport(null); setImportOpen(true) }}><PrismIcon name="upload" />导入文章</button>
+          <div className="flex flex-wrap items-center gap-3">
+            {savedWorkspace && !workspaceEdited && <button type="button" className="text-action" onClick={() => void restoreWorkspace()}>继续上次编辑</button>}
+            <button type="button" className="secondary-action" onClick={() => { setPendingImport(null); setImportOpen(true) }}><PrismIcon name="upload" />导入文章</button>
+          </div>
         </div>
-        {!workspaceEdited && <div className="missing-images" role="status"><span>正在查看示例「{SAMPLE_ARTICLES.find(sample => sample.id === activeSampleId)?.name ?? '图床对照'}」。{savedWorkspace ? '上次保存的文章已保留。' : '导入 Markdown 开始编辑自己的文章。'}</span>{savedWorkspace && <button type="button" className="secondary-action" onClick={() => void restoreWorkspace()}>继续上次编辑</button>}</div>}
         {importProgress && <div className="missing-images" role="status"><span>正在处理文章配图 {importProgress.done} / {importProgress.total}，已跳过 {importProgress.skipped} 张无关图片。</span><button type="button" className="text-action" onClick={() => { importToken.current += 1; setImportProgress(null); showToast('已取消导入，原稿和已保存配图未修改', 'info') }}>取消导入</button></div>}
         {saveState === 'error' && <div className="save-warning" role="alert">当前浏览器未能保存草稿。请先<button type="button" onClick={downloadSource}>下载原稿备份</button>并保留原始配图文件夹，避免刷新后丢失修改。</div>}
         {workflowStep !== 3 && <>
@@ -559,7 +561,7 @@ function App() {
             <button type="button" aria-pressed={publicationMode === 'article'} onClick={() => { setPublicationMode('article'); }}>发布文章</button>
             <button type="button" aria-pressed={publicationMode === 'deck'} onClick={() => { setPublicationMode('deck'); }}>生成图集</button>
           </nav>}
-          <div className="preview-caption"><span className="preview-article-title" title={analysis.title || '未命名文章'}>{analysis.title || '未命名文章'}</span><span className="preview-article-status">{imageReport.total} 张图片 · {checkSummary}</span><button type="button" className="text-action" aria-expanded={editorOpen} onClick={() => setEditorOpen((open) => !open)}>{editorOpen ? '收起原稿' : '修改原稿 / 选择示例'}</button></div>
+          <div className="preview-caption">{activeSampleId && <span className="rounded-md bg-violet-50 px-2 py-1 text-xs font-medium text-violet-700">示例</span>}<span className="preview-article-title" title={analysis.title || '未命名文章'}>{analysis.title || '未命名文章'}</span><span className="preview-article-status">{imageReport.total} 张图片 · {checkSummary}</span><button type="button" className="text-action" aria-expanded={editorOpen} onClick={() => setEditorOpen((open) => !open)}>{editorOpen ? '收起原稿' : '修改原稿 / 选择示例'}</button></div>
           {platform.format !== 'deck' && imageReport.red > 0 && <div className="missing-images" role="status">
             <div><strong>{imageReport.red} 张图片尚未就绪</strong><p>选择配图文件夹，自动补齐文章图片。</p>
               <ul>{imageReport.findings.filter((item) => item.health === 'red').map((item, index) => <li key={`${item.url}-${index}`}>{item.url} — {item.reason}</li>)}</ul>
