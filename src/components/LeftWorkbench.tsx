@@ -19,6 +19,7 @@ interface LeftWorkbenchProps {
   locateRequest: { line: number; nonce: number } | null
   onMarkdownChange: (value: string) => void
   onSelectSample: (sample: SampleArticle) => void
+  onOpenImport: () => void
   onImportFiles: (files: FileList | File[]) => void
   onPicListUpload: () => void
   onInlineConvert: () => void
@@ -28,9 +29,8 @@ interface LeftWorkbenchProps {
 
 export function LeftWorkbench({ markdown, stats, sanitize, imageReport, samples, activeSampleId,
   localImages, imageBusy, saveState, locateRequest, onMarkdownChange, onSelectSample, onImportFiles,
-  onPicListUpload, onInlineConvert, onOpenGuide, onRemoveImage,
+  onPicListUpload, onInlineConvert, onOpenGuide, onRemoveImage, onOpenImport,
 }: LeftWorkbenchProps) {
-  const inputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const lastLocateNonce = useRef(0)
   const [dragging, setDragging] = useState(false)
@@ -84,12 +84,10 @@ export function LeftWorkbench({ markdown, stats, sanitize, imageReport, samples,
       <div className="editor-toolbar">
         <div>
           <h2>准备一篇文章</h2>
-          <p>选择 Markdown 正文，可同时选择配图；只选图片不会更换文章。</p>
+          <p>编辑当前原稿，或导入 Markdown 文件 / 文章文件夹。</p>
         </div>
-        <input ref={inputRef} type="file" multiple accept=".md,.markdown,.txt,image/*" className="hidden"
-          onChange={(event) => { if (event.target.files) onImportFiles(event.target.files); event.target.value = '' }} />
-        <button type="button" className="secondary-action" onClick={() => inputRef.current?.click()}>
-          <PrismIcon name="upload" /> 导入文章与配图
+        <button type="button" className="secondary-action" onClick={onOpenImport}>
+          <PrismIcon name="upload" /> 导入文章
         </button>
       </div>
       <div className="sample-picker">

@@ -1,4 +1,5 @@
 import { hostImageSources, prepareDouyinImageSources } from './components/hostImages'
+import { articleFiles, filesForArticle } from './components/articleImport'
 import { withDeckDraft, type DeckDraft } from './components/deckDraft'
 import { workspaceBackup } from './components/workspaceBackup'
 import { loadSavedCovers } from './components/CoverStudio'
@@ -117,6 +118,9 @@ function App() {
   const importToken = useRef(0)
   const [importProgress, setImportProgress] = useState<{ done: number; total: number; skipped: number } | null>(null)
   const folderInput = useRef<HTMLInputElement>(null)
+  const articleFolderInput = useRef<HTMLInputElement>(null)
+  const [importOpen, setImportOpen] = useState(false)
+  const [pendingImport, setPendingImport] = useState<File[] | null>(null)
   const [stageTab, setStageTab] = useState<PublishTab>('passport')
   const [backingUp, setBackingUp] = useState(false)
   const [saveState, setSaveState] = useState<'saving' | 'saved' | 'error'>('saving')
@@ -271,6 +275,20 @@ function App() {
     } catch { showToast('未能恢复配图，原草稿已保留，请重试', 'error') }
   }
 
+  const chooseImport = (files: FileList | File[]) => {
+    const list = Array.from(files)
+    if (!list.length) return
+    const articles = articleFiles(list)
+    if (articles.length !== 1) {
+      setPendingImport(list)
+      setImportOpen(true)
+      return
+    }
+    setImportOpen(false)
+    setPendingImport(null)
+    void handleImportFiles(filesForArticle(list, articles[0]))
+  }
+
   const handleImportFiles = async (files: FileList | File[], imagesOnly = false) => {
     const list = Array.from(files)
     if (list.length === 0) return
@@ -345,7 +363,7 @@ function App() {
     const missing = resolveImageReport(scanImages(analyzeMarkdown(next).images, next), readyImages).findings.filter((item) => item.health === 'red')
     const processed = Object.keys(additions).length
     if (missing.length > 0) {
-      showToast(`文章已导入，仍有 ${missing.length} 张图片未读入。请选择包含配图的文件夹。`, 'info')
+      showToast(`${loadedMarkdown ? '文章已导入' : '正文未更换'}，仍有 ${missing.length} 张图片未读入，请补充配图。`, 'info')
     } else if (neededImages.length > processed) {
       showToast(`已处理 ${processed} 张图片，${neededImages.length - processed} 张处理失败，请检查文件。`, 'error')
     } else if (loadedMarkdown && imageFiles.length > 0) {
@@ -524,12 +542,10 @@ function App() {
             <button type="button" aria-current={workflowStep !== 3 ? 'page' : undefined} onClick={() => setWorkflowStep(2)}>文章与平台预览</button>
             <button type="button" aria-current={workflowStep === 3 ? 'page' : undefined} disabled={!markdown.trim()} onClick={() => { setStageTab('passport'); setWorkflowStep(3) }}>准备发布 →</button>
           </nav>
-          <input ref={importInput} type="file" multiple accept=".md,.markdown,.txt,image/*" className="hidden" onChange={(event) => { if (event.target.files) void handleImportFiles(event.target.files); event.target.value = '' }} />
+          <input ref={importInput} type="file" multiple accept=".md,.markdown,.txt,image/*" className="hidden" onChange={(event) => { if (event.target.files) chooseImport(event.target.files); event.target.value = '' }} />
           <input ref={folderInput} type="file" multiple {...{ webkitdirectory: '', directory: '' }} className="hidden" onChange={(event) => { if (event.target.files) void handleImportFiles(event.target.files, true); event.target.value = '' }} />
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className="secondary-action" onClick={() => importInput.current?.click()}><PrismIcon name="upload" />导入文章</button>
-            <button type="button" className="secondary-action" onClick={() => folderInput.current?.click()}>为当前文章补充配图</button>
-          </div>
+          <input ref={articleFolderInput} type="file" multiple {...{ webkitdirectory: '', directory: '' }} className="hidden" onChange={(event) => { if (event.target.files) chooseImport(event.target.files); event.target.value = '' }} />
+          <button type="button" className="secondary-action" onClick={() => { setPendingImport(null); setImportOpen(true) }}><PrismIcon name="upload" />导入文章</button>
         </div>
         {!workspaceEdited && <div className="missing-images" role="status"><span>正在查看示例「{SAMPLE_ARTICLES.find(sample => sample.id === activeSampleId)?.name ?? '图床对照'}」。{savedWorkspace ? '上次保存的文章已保留。' : '导入 Markdown 开始编辑自己的文章。'}</span>{savedWorkspace && <button type="button" className="secondary-action" onClick={() => void restoreWorkspace()}>继续上次编辑</button>}</div>}
         {importProgress && <div className="missing-images" role="status"><span>正在处理文章配图 {importProgress.done} / {importProgress.total}，已跳过 {importProgress.skipped} 张无关图片。</span><button type="button" className="text-action" onClick={() => { importToken.current += 1; setImportProgress(null); showToast('已取消导入，原稿和已保存配图未修改', 'info') }}>取消导入</button></div>}
@@ -554,7 +570,7 @@ function App() {
           {editorOpen && <LeftWorkbench markdown={markdown} stats={analysis.stats} sanitize={sanitize} imageReport={imageReport}
             samples={SAMPLE_ARTICLES} activeSampleId={activeSampleId} localImages={localImageList} imageBusy={imageBusy} saveState={saveState}
             locateRequest={locateRequest} onMarkdownChange={handleMarkdownChange} onSelectSample={handleSelectSample}
-            onImportFiles={handleImportFiles} onPicListUpload={handlePicListUpload} onInlineConvert={handleInlineConvert}
+            onImportFiles={chooseImport} onOpenImport={() => { setPendingImport(null); setImportOpen(true) }} onPicListUpload={handlePicListUpload} onInlineConvert={handleInlineConvert}
             onOpenGuide={() => setGuideOpen(true)} onRemoveImage={handleRemoveImage} />}
           <div className="live-preview">
           <CenterPreview platformId={platformId} platform={platform} themeId={themeId} theme={theme} result={displayResult} passport={passport}
@@ -575,6 +591,26 @@ function App() {
       </main>
 
       <PicListGuideModal open={guideOpen} onClose={() => setGuideOpen(false)} onToast={showToast} />
+
+      {importOpen && <dialog ref={node => { if (node && !node.open) node.showModal() }} onCancel={() => { setImportOpen(false); setPendingImport(null) }} className="fixed inset-0 m-auto max-h-[85vh] w-[min(560px,92vw)] overflow-auto rounded-2xl border border-stone-200 bg-white p-6 shadow-xl backdrop:bg-black/30" aria-labelledby="import-title">
+        <h2 id="import-title" className="text-xl font-semibold">导入文章</h2>
+        {!pendingImport ? <>
+          <p className="my-4">支持 Markdown 文件，或包含文章与配图的文件夹。</p>
+          <div className="flex flex-wrap gap-3">
+            <button type="button" className="primary-action" onClick={() => importInput.current?.click()}>选择文件</button>
+            <button type="button" className="secondary-action" onClick={() => articleFolderInput.current?.click()}>选择文章文件夹</button>
+          </div>
+          <p className="my-4 text-sm text-stone-500">纯文字可直接选正文；带配图可选整个文章文件夹，自动关联子目录中的图片。</p>
+        </> : articleFiles(pendingImport).length ? <>
+          <p className="my-4">找到多篇文章，请选择本次要导入的一篇。</p>
+          <div className="flex flex-col gap-2">{articleFiles(pendingImport).map((file, index) => <button type="button" className="secondary-action break-all text-left" key={index} onClick={() => { const files = filesForArticle(pendingImport, file); setImportOpen(false); setPendingImport(null); void handleImportFiles(files) }}>{file.webkitRelativePath || file.name}</button>)}</div>
+        </> : <>
+          <p className="my-4">未找到 Markdown 正文，当前文章未更换。请选择包含 .md、.markdown 或 .txt 正文的文件或文件夹。</p>
+          <button type="button" className="secondary-action" onClick={() => { const files = pendingImport; setImportOpen(false); setPendingImport(null); void handleImportFiles(files, true) }}>仅为当前文章补充配图</button>
+          <button type="button" className="text-action ml-3" onClick={() => setPendingImport(null)}>重新选择</button>
+        </>}
+        <div className="mt-6"><button type="button" className="text-action" onClick={() => { setImportOpen(false); setPendingImport(null) }}>取消</button></div>
+      </dialog>}
 
       {toast && (
         <div
