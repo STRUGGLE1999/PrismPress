@@ -33,9 +33,17 @@ function article(format: 'html' | 'markdown', body: string, plainText = body): C
   return { format, body, plainText } as CompileResult
 }
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
 
 describe('clipboard fallback', () => {
+  it('exits when clipboard permission never settles instead of leaving publish busy forever', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('navigator', { clipboard: { writeText: () => new Promise(() => {}) } })
+    const task = copyCompiledArticle(article('markdown', '正文'))
+    const rejected = expect(task).rejects.toThrow('剪贴板')
+    await vi.advanceTimersByTimeAsync(10000)
+    await rejected
+  })
   it('copies literal plain text through a textarea without parsing HTML', async () => {
     const browser = fallbackBrowser([true])
     const text = '<img src=x onerror="alert(1)"> & Markdown **正文**'

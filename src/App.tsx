@@ -1,5 +1,6 @@
-import { hostImageSources, prepareDouyinImageSources } from './components/hostImages'
+import { hostImageSources, prepareInlineImageSources } from './components/hostImages'
 import { articleFiles, filesForArticle } from './components/articleImport'
+import { waitForTask } from './core/waitForTask'
 import { withDeckDraft, type DeckDraft } from './components/deckDraft'
 import { workspaceBackup } from './components/workspaceBackup'
 import { loadSavedCovers } from './components/CoverStudio'
@@ -136,6 +137,9 @@ function App() {
   const [guideOpen, setGuideOpen] = useState(false)
   const [synced, setSynced] = useState<Partial<Record<PlatformId, string>>>({})
   const [relaying, setRelaying] = useState<PlatformId | null>(null)
+  const [relayMessage, setRelayMessage] = useState('正在准备正文…')
+  const [relayError, setRelayError] = useState('')
+  const relayAbort = useRef<AbortController | null>(null)
   const [locateRequest, setLocateRequest] = useState<{ line: number; nonce: number } | null>(null)
   const locateNonce = useRef(0)
   const toastTimer = useRef<number | null>(null)
@@ -196,6 +200,7 @@ function App() {
   useEffect(() => {
     return () => {
       if (toastTimer.current) window.clearTimeout(toastTimer.current)
+      relayAbort.current?.abort()
     }
   }, [])
 
@@ -443,9 +448,11 @@ function App() {
     })
   }
 
-  const prepareCopy = async (id: PlatformId) => {
+  const prepareCopy = async (id: PlatformId, signal: AbortSignal) => {
     const inlineSources = imageSources(markdown, localImages, true)
-    const copySources = id === 'douyin' ? await prepareDouyinImageSources(inlineSources, imageReport.findings.map(image => image.url)) : id === 'xiaohongshu' ? sources : await hostImageSources(sources)
+    const copySources = (id === 'douyin' || id === 'bilibili') ? await prepareInlineImageSources(inlineSources, imageReport.findings.map(image => image.url), { signal, minDimension: id === 'douyin' ? 100 : 0, onProgress: (done, total) => setRelayMessage(`正在准备配图 ${done} / ${total}…`) }) : id === 'xiaohongshu' ? sources : await waitForTask(hostImageSources(sources), signal, '配图准备超时，请重试')
+    signal.throwIfAborted()
+    setRelayMessage('正在整理正文…')
     const updates = new Map(Object.entries(sources).map(([key, value]) => [value, copySources[key]]))
     setLocalImages(previous => Object.fromEntries(Object.entries(previous).map(([name, asset]) => {
       const url = updates.get(asset.dataUrl)
@@ -480,21 +487,33 @@ function App() {
   }, [])
 
   const handleRelay = async (id: PlatformId) => {
-    if (relaying) return
+    if (relayAbort.current) return
     const profile = getPublicationPlatform(id, publicationMode)
+    const controller = new AbortController()
+    relayAbort.current = controller
+    const timer = setTimeout(() => controller.abort(new DOMException('timeout', 'TimeoutError')), 120000)
     setRelaying(id)
+    setSynced(previous => ({ ...previous, [id]: undefined }))
+    setRelayMessage('正在准备正文…')
+    setRelayError('')
 
     try {
-      const compiled = profile.format === 'deck' ? await compileArticle(markdown, id, { publicationMode, deckMode, imageSources: sources }) : await prepareCopy(id)
-      await copyCompiledArticle(withDeckDraft(compiled, deckDrafts[`${id}:${contentKey}`])!)
+      const compiled = await waitForTask(profile.format === 'deck' ? compileArticle(markdown, id, { publicationMode, deckMode, imageSources: sources }) : prepareCopy(id, controller.signal), controller.signal, '正文准备超时，请重试')
+      setRelayMessage('正在写入剪贴板…')
+      await waitForTask(copyCompiledArticle(withDeckDraft(compiled, deckDrafts[`${id}:${contentKey}`])!), controller.signal, '复制等待超时，请保持页面在前台后重试')
+      controller.signal.throwIfAborted()
 
       window.open(profile.editorUrl, '_blank', 'noopener,noreferrer')
 
       setSynced((previous) => ({ ...previous, [id]: copyKeys[id] }))
       showToast(`正文已复制，请在${profile.shortName}正文编辑区粘贴，标题需单独填写。`, 'success')
     } catch (error) {
-      showToast(error instanceof Error ? error.message : `${profile.name}接力失败`, 'error')
+      const message = error instanceof Error && error.name === 'AbortError' ? '已取消，原稿与配图已保留。' : error instanceof Error && error.name === 'TimeoutError' ? '配图准备超时，原稿与配图已保留，请重试。' : error instanceof Error ? error.message : `${profile.name}准备失败，请重试`
+      setRelayError(message)
+      showToast(message, 'info')
     } finally {
+      clearTimeout(timer)
+      relayAbort.current = null
       setRelaying(null)
     }
   }
@@ -585,7 +604,7 @@ function App() {
           <nav className="publication-tabs" aria-label="发布准备选项">
             {([{ id: 'passport', label: '正文与标题' }, { id: 'covers', label: '封面（可选）' }] as const).map((item) => <button type="button" key={item.id} aria-current={stageTab === item.id ? 'page' : undefined} onClick={() => setStageTab(item.id)}>{item.label}</button>)}
           </nav>
-          <RightPassport aiLoading={aiState.loading} hasAi={Boolean(aiState.value)} markdown={markdown} passport={passport} platform={platform} theme={theme} copyKeys={copyKeys} synced={synced} relaying={relaying}
+          <RightPassport aiLoading={aiState.loading} hasAi={Boolean(aiState.value)} markdown={markdown} passport={passport} platform={platform} theme={theme} copyKeys={copyKeys} synced={synced} relaying={relaying} relayMessage={relayMessage} relayError={relayError} onCancelRelay={() => relayAbort.current?.abort()}
             section={stageTab} checkSummary={checkSummary} onCopyText={handleCopyText} onRelay={handleRelay} onToast={showToast} />
           <div className="step-actions inside"><button type="button" className="text-action" onClick={() => setWorkflowStep(2)}>← 返回平台预览</button></div>
         </section>}

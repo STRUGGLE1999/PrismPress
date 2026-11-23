@@ -126,7 +126,7 @@ export const SAMPLE_ARTICLES: SampleArticle[] = [
   },
 ]
 
-export const DEFAULT_SAMPLE = SAMPLE_ARTICLES[1]
+export const DEFAULT_SAMPLE = SAMPLE_ARTICLES[0]
 
 export const CSDN_COMPARISON_SAMPLE: SampleArticle = {
     id: 'real-engineering-csdn',

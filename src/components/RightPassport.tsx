@@ -13,6 +13,9 @@ interface RightPassportProps {
   copyKeys: Record<PlatformId, string>
   synced: Partial<Record<PlatformId, string>>
   relaying: PlatformId | null
+  relayMessage: string
+  relayError: string
+  onCancelRelay: () => void
   section: 'passport' | 'covers'
   checkSummary?: string
   onCopyText: (text: string, label: string) => void
@@ -20,7 +23,7 @@ interface RightPassportProps {
   onToast: (message: string, tone?: 'success' | 'error' | 'info') => void
 }
 
-export function RightPassport({ markdown, aiLoading, hasAi, passport, platform, theme, copyKeys, synced, relaying,
+export function RightPassport({ markdown, aiLoading, hasAi, passport, platform, theme, copyKeys, synced, relaying, relayMessage, relayError, onCancelRelay,
   section, checkSummary, onCopyText, onRelay, onToast,
 }: RightPassportProps) {
   const handleAiExtract = async () => {
@@ -73,9 +76,11 @@ export function RightPassport({ markdown, aiLoading, hasAi, passport, platform, 
       <h3>{isDeck ? '发布文案' : '文章正文'}</h3>
       <p className="section-description">{checkSummary}。{isDeck ? '请先在预览页下载图集。' : '配图会自动准备，复制后在平台正文编辑区粘贴。'}</p>
       <button type="button" className="primary-action" disabled={relaying !== null} onClick={() => onRelay(platform.id)}>
-        <PrismIcon name="publish" />{relaying === platform.id ? '正在准备正文与配图…' : `复制${isDeck ? '文案' : '正文'}并打开${platform.shortName}`}
+        <PrismIcon name="publish" />{relaying === platform.id ? relayMessage : `复制${isDeck ? '文案' : '正文'}并打开${platform.shortName}`}
       </button>
-      <p className="mt-3 text-sm text-[#71717A]" role="status">{synced[platform.id] === copyKeys[platform.id] ? `正文已复制，请在${platform.shortName}粘贴，标题需单独填写，检查图片后保存草稿。` : '标题单独复制，正文粘贴后由你检查并发布。'}</p>
+      {relaying === platform.id && <button type="button" className="text-action ml-3" onClick={onCancelRelay}>取消等待</button>}
+      {relayError && <p className="mt-3 text-sm" role="alert">{relayError}</p>}
+      <p className="mt-3 text-sm text-[#71717A]" role="status">{relaying === platform.id ? relayMessage : synced[platform.id] === copyKeys[platform.id] ? `正文已复制，请在${platform.shortName}粘贴，标题需单独填写，检查图片后保存草稿。` : '标题单独复制，正文粘贴后由你检查并发布。'}</p>
       <a href={platform.editorUrl} target="_blank" rel="noopener noreferrer" className="text-sm underline text-[#71717A]">未自动打开？打开平台编辑器</a>
     </div>
     {fields.slice(1).map((field) => <div className="publication-field" key={field.label}>

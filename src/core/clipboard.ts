@@ -1,4 +1,12 @@
 import type { CompileResult } from './types'
+import { waitForTask } from './waitForTask'
+
+async function writeClipboard(task: Promise<void>): Promise<void> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(new DOMException('timeout', 'TimeoutError')), 10000)
+  try { await waitForTask(task, controller.signal, '剪贴板写入等待超时，请保持页面在前台并允许剪贴板权限后重试') }
+  finally { clearTimeout(timer) }
+}
 
 function copyPlainViaSelection(text: string): void {
   const textarea = document.createElement('textarea')
@@ -49,7 +57,7 @@ function copyRichViaSelection(html: string): void {
 export async function copyCompiledArticle(result: CompileResult): Promise<void> {
   if (result.format === 'markdown' || result.format === 'deck') {
     if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(result.body)
+      await writeClipboard(navigator.clipboard.writeText(result.body))
       return
     }
     copyPlainViaSelection(result.body)
@@ -61,7 +69,7 @@ export async function copyCompiledArticle(result: CompileResult): Promise<void> 
       'text/html': new Blob([result.body], { type: 'text/html' }),
       'text/plain': new Blob([result.plainText || result.body], { type: 'text/plain' }),
     })
-    await navigator.clipboard.write([item])
+    await writeClipboard(navigator.clipboard.write([item]))
     return
   }
 
@@ -70,7 +78,7 @@ export async function copyCompiledArticle(result: CompileResult): Promise<void> 
 
 export async function copyPlainText(text: string): Promise<void> {
   if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text)
+    await writeClipboard(navigator.clipboard.writeText(text))
     return
   }
   copyPlainViaSelection(text)
